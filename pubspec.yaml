@@ -1,0 +1,58 @@
+name: manifiestos_app
+description: "Aplicación para la generación de manifiestos y gestión de clientes, operadores y empleados."
+publish_to: 'none' 
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Supabase for backend and database
+  supabase_flutter: ^2.0.0
+
+  # State Management
+  provider: ^6.0.0
+
+  # PDF Generation and Handling
+  pdf: ^3.10.7
+  printing: ^5.12.0
+  path_provider: ^2.0.15
+
+  # Digital Signatures
+  signature: ^5.4.1
+  uuid: ^4.4.0
+  
+  # Navigation
+  go_router: ^12.0.0
+
+  # Utility
+  intl: ^0.19.0 # For date formatting
+  cupertino_icons: ^1.0.2
+  flutter_dotenv: ^5.1.0 # To manage environment variables (Supabase keys)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/ # Ruta específica para las imágenes
+    - assets/fonts/
+    - .env # Archivo para variables de entorno
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Italic.ttf
+          style: italic
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Roboto-BoldItalic.ttf
+          weight: 700
+          style: italic
