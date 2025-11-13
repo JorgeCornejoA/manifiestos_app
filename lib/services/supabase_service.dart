@@ -1,4 +1,3 @@
-// IMPORTACIÓN AÑADIDA: Necesaria para usar Uint8List
 import 'dart:typed_data';
 
 import 'package:manifiestos_app/models/manifest_data.dart';
@@ -15,7 +14,6 @@ class SupabaseService {
       String? recibioFirmaUrl;
       final manifestId = data.id ?? _uuid.v4();
 
-      // MEJORA: Se verifica que los bytes de la firma no sean nulos NI estén vacíos.
       if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
         final path = 'signatures/$manifestId/embarco_firma.png';
         await _supabase.storage.from('manifests').uploadBinary(
@@ -39,6 +37,8 @@ class SupabaseService {
       final manifestMap = data.toMap();
       manifestMap['embarco_firma_url'] = embarcoFirmaUrl;
       manifestMap['recibio_firma_url'] = recibioFirmaUrl;
+      
+      // No incluimos 'pdf_url' aquí porque se actualiza DESPUÉS de subir el PDF
 
       final id = data.id;
       if (id == null) {
@@ -67,16 +67,34 @@ class SupabaseService {
     }
   }
   
-  Future<void> uploadPdf(Uint8List pdfBytes, String fileName) async {
+  // MODIFICACIÓN: uploadPdf ahora devuelve la URL pública del archivo subido
+  Future<String?> uploadPdf(Uint8List pdfBytes, String fileName) async {
     try {
+      final path = 'pdfs/$fileName';
       await _supabase.storage.from('manifests').uploadBinary(
-            'pdfs/$fileName',
+            path,
             pdfBytes,
             fileOptions: const FileOptions(upsert: true),
           );
+      // Devuelve la URL pública
+      return _supabase.storage.from('manifests').getPublicUrl(path);
     } catch (e) {
-      // Manejar error
+      // ignore: avoid_print
+      print('Error al subir PDF: $e');
+      return null;
+    }
+  }
+
+  // MODIFICACIÓN: Nueva función para actualizar el manifiesto con la URL del PDF
+  Future<void> updatePdfUrl(String manifestId, String pdfUrl) async {
+    try {
+      await _supabase
+          .from('manifests')
+          .update({'pdf_url': pdfUrl})
+          .eq('id', manifestId);
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error al actualizar PDF URL: $e');
     }
   }
 }
-

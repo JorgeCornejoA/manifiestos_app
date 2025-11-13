@@ -32,6 +32,9 @@ dependencies:
   intl: ^0.19.0 # For date formatting
   cupertino_icons: ^1.0.2
   flutter_dotenv: ^5.1.0 # To manage environment variables (Supabase keys)
+  
+  # MODIFICACIÓN: Se añade url_launcher para abrir el PDF
+  url_launcher: ^6.0.0
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,8 @@ import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:manifiestos_app/utils/pdf_generator.dart';
 import 'package:printing/printing.dart';
 import 'package:signature/signature.dart';
+// Se importa la librería de internacionalización para el formato de fecha
+import 'package:intl/intl.dart';
 
 // Helper class to manage controllers and focus nodes for each CargaItem
 class _CargaItemControllers {
@@ -109,11 +111,19 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
   
   String _formatDate(DateTime date) {
-    const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-    final day = date.day.toString().padLeft(2, '0');
-    final month = months[date.month - 1];
-    final year = date.year;
-    return '$day-$month-$year';
+    // Usar DateFormat para un formato de mes localizado y en mayúsculas
+    // 'es_ES' es un ejemplo, puedes necesitar 'es' o 'es_MX' dependiendo de tu configuración
+    try {
+      // Asegúrate de tener 'intl' en tu pubspec.yaml y de haber inicializado la localización si es necesario
+      return DateFormat('dd-MMM-yyyy', 'es_ES').format(date).toUpperCase();
+    } catch (e) {
+      // Fallback a mapa manual si la localización 'es_ES' no está registrada
+      const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+      final day = date.day.toString().padLeft(2, '0');
+      final month = months[date.month - 1];
+      final year = date.year;
+      return '$day-$month-$year';
+    }
   }
 
   Future<void> _selectDate() async {
@@ -169,7 +179,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-
+  // SOLUCIÓN: Se completa la función para cargar todos los datos
   void _loadManifestData(ManifestData manifest) {
     _trailerNoController.text = manifest.trailerNo;
     _productorController.text = manifest.productor;
@@ -313,7 +323,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final pdfBytes = await PdfGenerator.generatePdfBytes(data);
       final fileName = 'manifiesto-$manifestId.pdf';
-      await _supabaseService.uploadPdf(pdfBytes, fileName);
+      
+      // SOLUCIÓN: Se obtiene la URL del PDF y se guarda
+      final pdfUrl = await _supabaseService.uploadPdf(pdfBytes, fileName);
+      if (pdfUrl != null) {
+        await _supabaseService.updatePdfUrl(manifestId, pdfUrl);
+      }
+
       await Printing.layoutPdf(onLayout: (format) async => pdfBytes);
 
       if (mounted) {
@@ -529,4 +545,3 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     );
   }
 }
-

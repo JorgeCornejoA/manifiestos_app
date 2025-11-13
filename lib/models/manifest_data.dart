@@ -30,6 +30,9 @@ class ManifestData {
   final String? embarcoFirmaUrl;
   final String? recibioFirmaUrl;
 
+  // MODIFICACIÓN: Se añade el campo para la URL del PDF
+  final String? pdfUrl;
+
   // Transient fields for images
   final Uint8List? embarcoFirmaBytes;
   final Uint8List? recibioFirmaBytes;
@@ -63,6 +66,7 @@ class ManifestData {
     this.trailerLayout = const {},
     this.embarcoFirmaUrl,
     this.recibioFirmaUrl,
+    this.pdfUrl, // Se añade al constructor
     this.embarcoFirmaBytes,
     this.recibioFirmaBytes,
   });
@@ -106,6 +110,7 @@ class ManifestData {
       trailerLayout: layoutMap,
       embarcoFirmaUrl: map['embarco_firma_url'],
       recibioFirmaUrl: map['recibio_firma_url'],
+      pdfUrl: map['pdf_url'], // Se lee desde el mapa
     );
   }
 
@@ -139,6 +144,7 @@ class ManifestData {
       'trailer_layout': trailerLayout,
       'embarco_firma_url': embarcoFirmaUrl,
       'recibio_firma_url': recibioFirmaUrl,
+      'pdf_url': pdfUrl, // Se añade al mapa
     };
   }
 }
@@ -147,11 +153,9 @@ class CargaItem {
   String producto;
   String etiquetas;
   String tamano;
-  // MODIFICACIÓN: Se usan los campos para el cálculo
   int pallets;
   int cajasPorPallet;
   
-  // Campo calculado
   int get cajas => pallets * cajasPorPallet;
 
   CargaItem({
@@ -179,8 +183,7 @@ class CargaItem {
       'tamano': tamano,
       'pallets': pallets,
       'cajas_por_pallet': cajasPorPallet,
-      'cajas': cajas, // Se guarda el total calculado
+      'cajas': cajas,
     };
   }
 }
-

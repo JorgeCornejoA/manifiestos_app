@@ -246,6 +246,7 @@ class PdfGenerator {
             }).toList(),
             // Fila de totales
             pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.grey200),
               children: [
                 _emptyCell(),
                 _emptyCell(),
