@@ -4,11 +4,74 @@ import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:manifiestos_app/utils/pdf_generator.dart';
 import 'package:printing/printing.dart';
 import 'package:signature/signature.dart';
-// Se importa la librería de internacionalización para el formato de fecha
 import 'package:intl/intl.dart';
+
+// --- NUEVO: Modelos de ejemplo para Autocomplete ---
+class Client {
+  final String id;
+  final String name;
+  final String domicilio;
+  final String ciudad;
+
+  Client({
+    required this.id,
+    required this.name,
+    required this.domicilio,
+    required this.ciudad,
+  });
+
+  // --- MODIFICADO: Se añade control de nulos con (as String? ?? '') ---
+  factory Client.fromJson(Map<String, dynamic> json) {
+    return Client(
+      // Si el valor es nulo en Supabase, usará un string vacío ''
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      domicilio: json['domicilio'] as String? ?? '',
+      ciudad: json['ciudad'] as String? ?? '',
+    );
+  }
+}
+
+class Operator {
+  final String id;
+  final String name;
+  final String trailer;
+  final String placas;
+  final String caja;
+  final String lineaTransportista;
+  final String tel;
+
+  Operator({
+    required this.id,
+    required this.name,
+    required this.trailer,
+    required this.placas,
+    required this.caja,
+    required this.lineaTransportista,
+    required this.tel,
+  });
+
+  // --- MODIFICADO: Se añade control de nulos con (as String? ?? '') ---
+  factory Operator.fromJson(Map<String, dynamic> json) {
+    return Operator(
+      // Si el valor es nulo en Supabase, usará un string vacío ''
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      trailer: json['trailer'] as String? ?? '',
+      placas: json['placas'] as String? ?? '',
+      caja: json['caja'] as String? ?? '',
+      // Mantenemos tu corrección de 'linea_transportista'
+      lineaTransportista: json['linea_transportista'] as String? ?? '',
+      tel: json['tel'] as String? ?? '',
+    );
+  }
+}
+// --- Fin de Modelos ---
 
 // Helper class to manage controllers and focus nodes for each CargaItem
 class _CargaItemControllers {
+  // --- NUEVO: Key para validar cada fila de producto ---
+  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController producto;
   final TextEditingController etiquetas;
   final TextEditingController tamano;
@@ -27,8 +90,10 @@ class _CargaItemControllers {
         etiquetas = TextEditingController(text: item.etiquetas),
         tamano = TextEditingController(text: item.tamano),
         pallets = TextEditingController(text: item.pallets.toString()),
-        cajasPorPallet = TextEditingController(text: item.cajasPorPallet.toString()),
-        cajas = TextEditingController(text: (item.pallets * item.cajasPorPallet).toString()),
+        cajasPorPallet =
+            TextEditingController(text: item.cajasPorPallet.toString()),
+        cajas =
+            TextEditingController(text: (item.pallets * item.cajasPorPallet).toString()),
         productoNode = FocusNode(),
         etiquetasNode = FocusNode(),
         tamanoNode = FocusNode(),
@@ -63,6 +128,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = false;
 
+  // --- NUEVO: Keys para validar cada paso del Stepper ---
+  final _formKeyStep0 = GlobalKey<FormState>();
+  final _formKeyStep1 = GlobalKey<FormState>();
+  final _formKeyStep2 = GlobalKey<FormState>();
+  final _formKeyStep4 = GlobalKey<FormState>();
+  // El paso 3 (Carga) y 5 (Diagrama) se validarán manualmente
+
   // Controllers y FocusNodes para todos los campos
   final _trailerNoController = TextEditingController();
   final _productorController = TextEditingController();
@@ -90,8 +162,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   List<_CargaItemControllers> _cargaItemControllers = [];
   late Map<int, TextEditingController> _trailerLayoutControllers;
-  final SignatureController _embarcoSignatureController = SignatureController(penStrokeWidth: 2, penColor: Colors.black);
-  final SignatureController _recibioSignatureController = SignatureController(penStrokeWidth: 2, penColor: Colors.black);
+  final SignatureController _embarcoSignatureController =
+      SignatureController(penStrokeWidth: 2, penColor: Colors.black);
+  final SignatureController _recibioSignatureController =
+      SignatureController(penStrokeWidth: 2, penColor: Colors.black);
 
   int _totalPallets = 0;
   int _totalCajas = 0;
@@ -101,24 +175,24 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   @override
   void initState() {
     super.initState();
-    _trailerLayoutControllers = { for (var i = 0; i < 30; i++) i: TextEditingController() };
+    _trailerLayoutControllers = {
+      for (var i = 0; i < 30; i++) i: TextEditingController()
+    };
     if (widget.manifest != null) {
       _loadManifestData(widget.manifest!);
     } else {
       _fechaController.text = _formatDate(DateTime.now());
-      setState(() { _addCargaItem(); });
+      setState(() {
+        _addCargaItem();
+      });
     }
   }
-  
+
   String _formatDate(DateTime date) {
-    // Usar DateFormat para un formato de mes localizado y en mayúsculas
-    // 'es_ES' es un ejemplo, puedes necesitar 'es' o 'es_MX' dependiendo de tu configuración
     try {
-      // Asegúrate de tener 'intl' en tu pubspec.yaml y de haber inicializado la localización si es necesario
       return DateFormat('dd-MMM-yyyy', 'es_ES').format(date).toUpperCase();
     } catch (e) {
-      // Fallback a mapa manual si la localización 'es_ES' no está registrada
-      const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+      const months = [ 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC' ];
       final day = date.day.toString().padLeft(2, '0');
       final month = months[date.month - 1];
       final year = date.year;
@@ -170,7 +244,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       currentTotalPallets += pallets;
       currentTotalCajas += cajas;
     }
-    
+
     if (mounted) {
       setState(() {
         _totalPallets = currentTotalPallets;
@@ -179,7 +253,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // SOLUCIÓN: Se completa la función para cargar todos los datos
   void _loadManifestData(ManifestData manifest) {
     _trailerNoController.text = manifest.trailerNo;
     _productorController.text = manifest.productor;
@@ -215,7 +288,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         newControllers.cajasPorPallet.addListener(_calculateTotals);
         return newControllers;
       }).toList();
-      
+
       if (_cargaItemControllers.isEmpty) {
         _addCargaItem();
       }
@@ -258,15 +331,119 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _embarcoSignatureController.dispose();
     _recibioSignatureController.dispose();
     _trailerLayoutControllers.forEach((_, controller) => controller.dispose());
-     for (final controllers in _cargaItemControllers) {
+    for (final controllers in _cargaItemControllers) {
       controllers.dispose();
     }
     super.dispose();
   }
 
+  // --- NUEVO: Funciones de búsqueda para Autocomplete ---
+  
+  Future<Iterable<Client>> _searchClients(String query) async {
+    if (query.isEmpty) {
+      return const Iterable.empty();
+    }
+    try {
+      final data = await _supabaseService.searchClients(query); 
+      // Aquí es donde el .fromJson() se llama.
+      // Si falla, verás un error en la consola de depuración.
+      return data.map((json) => Client.fromJson(json));
+    } catch (e) {
+      _showErrorSnackbar('Error al buscar clientes: $e');
+      return const Iterable.empty();
+    }
+  }
+
+  Future<Iterable<Operator>> _searchOperators(String query) async {
+    if (query.isEmpty) {
+      return const Iterable.empty();
+    }
+    try {
+      final data = await _supabaseService.searchOperators(query);
+      // Aquí es donde el .fromJson() se llama.
+      return data.map((json) => Operator.fromJson(json));
+    } catch (e) {
+      _showErrorSnackbar('Error al buscar operadores: $e');
+      return const Iterable.empty();
+    }
+  }
+
+  // --- NUEVO: Helper para mostrar errores ---
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: Colors.red,
+    ));
+  }
+
+  // --- MODIFICADO: Lógica de validación en onStepContinue ---
+  void _onStepContinue() {
+    bool isValid = true;
+
+    // Validar el paso actual
+    if (_currentStep == 0) {
+      isValid = _formKeyStep0.currentState!.validate();
+    } 
+    else if (_currentStep == 1) {
+      isValid = _formKeyStep1.currentState!.validate();
+    } 
+    else if (_currentStep == 2) {
+      isValid = _formKeyStep2.currentState!.validate();
+    } 
+    else if (_currentStep == 3) { // Validación de Carga
+      if (_cargaItemControllers.isEmpty) {
+        isValid = false;
+        _showErrorSnackbar('Debe añadir al menos un producto a la carga.');
+      } else {
+        // Validar cada fila de producto
+        for (final controller in _cargaItemControllers) {
+          if (!controller.formKey.currentState!.validate()) {
+            isValid = false;
+          }
+        }
+        if (!isValid) {
+          _showErrorSnackbar('Complete todos los campos obligatorios de la carga (Producto, Pallets, Cajas).');
+        }
+      }
+    } 
+    else if (_currentStep == 4) { // Validación de Firmas
+      isValid = _formKeyStep4.currentState!.validate(); // Valida los nombres
+      if (_embarcoSignatureController.isEmpty) {
+        isValid = false;
+        _showErrorSnackbar('La firma de "EMBARCÓ" es obligatoria.');
+      } else if (_recibioSignatureController.isEmpty) {
+        isValid = false;
+        _showErrorSnackbar('La firma de "RECIBIÓ" es obligatoria.');
+      }
+    }
+
+    // Si el paso actual es válido, avanzar
+    if (isValid) {
+      if (_currentStep < _totalSteps - 1) {
+        setState(() => _currentStep += 1);
+      } else {
+        // --- NUEVO: Validación del último paso (Diagrama) antes de guardar ---
+        final isDiagramEmpty = _trailerLayoutControllers.values.every((c) => c.text.isEmpty);
+        if (isDiagramEmpty) {
+          _showErrorSnackbar('Debe rellenar al menos una posición en el diagrama.');
+        } else {
+          // Todos los pasos son válidos, proceder a guardar
+          _generateAndSavePdf();
+        }
+      }
+    }
+  }
+  
+  void _onStepCancel() {
+     if (_currentStep > 0) {
+      setState(() => _currentStep -= 1);
+     }
+  }
+
   Future<void> _generateAndSavePdf() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final embarcoFirmaBytes = await _embarcoSignatureController.toPngBytes();
       final recibioFirmaBytes = await _recibioSignatureController.toPngBytes();
@@ -275,7 +452,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _trailerLayoutControllers.forEach((key, controller) {
         if (controller.text.isNotEmpty) layoutMap[key.toString()] = controller.text;
       });
-      
+
       final cargaItems = _cargaItemControllers.map((controllers) {
         return CargaItem(
           producto: controllers.producto.text,
@@ -323,8 +500,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final pdfBytes = await PdfGenerator.generatePdfBytes(data);
       final fileName = 'manifiesto-$manifestId.pdf';
-      
-      // SOLUCIÓN: Se obtiene la URL del PDF y se guarda
+
       final pdfUrl = await _supabaseService.uploadPdf(pdfBytes, fileName);
       if (pdfUrl != null) {
         await _supabaseService.updatePdfUrl(manifestId, pdfUrl);
@@ -333,13 +509,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       await Printing.layoutPdf(onLayout: (format) async => pdfBytes);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Manifiesto guardado y PDF generado con éxito')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Manifiesto guardado y PDF generado con éxito')));
         Navigator.of(context).pop();
       }
-
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al generar PDF: $e'), backgroundColor: Colors.red));
+        _showErrorSnackbar('Error al generar PDF: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -349,22 +525,36 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.manifest == null ? 'Nuevo Manifiesto' : 'Detalles del Manifiesto')),
+      appBar: AppBar(
+          title: Text(widget.manifest == null
+              ? 'Nuevo Manifiesto'
+              : 'Detalles del Manifiesto')),
       body: Stepper(
         type: StepperType.horizontal,
         currentStep: _currentStep,
-        onStepContinue: () { if (_currentStep < _totalSteps - 1) setState(() => _currentStep += 1); else _generateAndSavePdf(); },
-        onStepCancel: () { if (_currentStep > 0) setState(() => _currentStep -= 1); },
+        // --- MODIFICADO: Usar funciones personalizadas ---
+        onStepContinue: _onStepContinue,
+        onStepCancel: _onStepCancel,
         controlsBuilder: (context, details) {
-           final isLastStep = _currentStep == _totalSteps - 1;
-           return Padding(
+          final isLastStep = _currentStep == _totalSteps - 1;
+          return Padding(
             padding: const EdgeInsets.only(top: 16.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                if (_currentStep != 0) TextButton.icon(icon: const Icon(Icons.arrow_back), label: const Text('ANTERIOR'), onPressed: details.onStepCancel),
+                if (_currentStep != 0)
+                  TextButton.icon(
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('ANTERIOR'),
+                      onPressed: details.onStepCancel),
                 const Spacer(),
-                ElevatedButton.icon(icon: isLastStep ? const Icon(Icons.picture_as_pdf) : const Icon(Icons.arrow_forward), label: Text(isLastStep ? 'GUARDAR Y GENERAR' : 'SIGUIENTE'), onPressed: details.onStepContinue),
+                ElevatedButton.icon(
+                    icon: isLastStep
+                        ? const Icon(Icons.picture_as_pdf)
+                        : const Icon(Icons.arrow_forward),
+                    label: Text(
+                        isLastStep ? 'GUARDAR Y GENERAR' : 'SIGUIENTE'),
+                    onPressed: details.onStepContinue),
               ],
             ),
           );
@@ -372,45 +562,229 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         steps: [
           Step(
             title: const Text('Info General'),
-            content: Column(children: [
-              TextFormField(controller: _trailerNoController, decoration: const InputDecoration(labelText: 'TRAILER No.'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _productorController, decoration: const InputDecoration(labelText: 'PRODUCTOR'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _certificadoOrigenController, decoration: const InputDecoration(labelText: 'CERTIFICADO DE ORIGEN'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _guiaFitosanitariaController, decoration: const InputDecoration(labelText: 'GUÍA FITOSANITARIA'), textInputAction: TextInputAction.next),
-              TextFormField(
-                controller: _fechaController,
-                decoration: const InputDecoration(labelText: 'FECHA', suffixIcon: Icon(Icons.calendar_today)),
-                readOnly: true,
-                onTap: _selectDate,
-              ),
-            ]),
+            // --- MODIFICADO: Envolver en Form ---
+            content: Form(
+              key: _formKeyStep0,
+              child: Column(children: [
+                TextFormField(
+                  controller: _trailerNoController,
+                  decoration: const InputDecoration(labelText: 'TRAILER No.'),
+                  textInputAction: TextInputAction.next,
+                  // --- NUEVO: Validador ---
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Este campo es obligatorio';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: _productorController,
+                  decoration: const InputDecoration(labelText: 'PRODUCTOR'),
+                  textInputAction: TextInputAction.next,
+                  // --- NUEVO: Validador ---
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Este campo es obligatorio';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                    controller: _certificadoOrigenController,
+                    decoration:
+                        const InputDecoration(labelText: 'CERTIFICADO DE ORIGEN'),
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _guiaFitosanitariaController,
+                    decoration:
+                        const InputDecoration(labelText: 'GUÍA FITOSANITARIA'),
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                  controller: _fechaController,
+                  decoration: const InputDecoration(
+                      labelText: 'FECHA',
+                      suffixIcon: Icon(Icons.calendar_today)),
+                  readOnly: true,
+                  onTap: _selectDate,
+                  // --- NUEVO: Validador ---
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Este campo es obligatorio';
+                    }
+                    return null;
+                  },
+                ),
+              ]),
+            ),
             isActive: _currentStep >= 0,
           ),
           Step(
             title: const Text('Destino'),
-            content: Column(children: [
-              TextFormField(controller: _consignadoAController, decoration: const InputDecoration(labelText: 'CONSIGNADO A'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _facturaController, decoration: const InputDecoration(labelText: 'FACTURA'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _domicilioController, decoration: const InputDecoration(labelText: 'DOMICILIO'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _ciudadController, decoration: const InputDecoration(labelText: 'CIUDAD'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _condicionesController, decoration: const InputDecoration(labelText: 'CONDICIONES'), textInputAction: TextInputAction.done),
-            ]),
+            // --- MODIFICADO: Envolver en Form ---
+            content: Form(
+              key: _formKeyStep1,
+              child: Column(children: [
+                // --- MODIFICADO: Reemplazado con Autocomplete ---
+                Autocomplete<Client>(
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    // El valor del controller se pasa automáticamente
+                    return _searchClients(textEditingValue.text);
+                  },
+                  displayStringForOption: (Client option) => option.name,
+                  onSelected: (Client selection) {
+                    setState(() {
+                      _consignadoAController.text = selection.name;
+                      _domicilioController.text = selection.domicilio;
+                      _ciudadController.text = selection.ciudad;
+                    });
+                    FocusScope.of(context).nextFocus(); // Mover foco
+                  },
+                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                    // Sincronizar el controlador de estado con el que provee el Autocomplete
+                    // Esto es necesario para que _loadManifestData funcione
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                       if (textEditingController.text != _consignadoAController.text) {
+                         textEditingController.text = _consignadoAController.text;
+                       }
+                    });
+
+                    return TextFormField(
+                      controller: textEditingController, // Usar el controlador del builder
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(labelText: 'CONSIGNADO A'),
+                      textInputAction: TextInputAction.next,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Este campo es obligatorio';
+                        return null;
+                      },
+                      onChanged: (value) {
+                        // Sincronizar de vuelta al controlador de estado
+                        _consignadoAController.text = value;
+                      },
+                    );
+                  },
+                ),
+                TextFormField(
+                    controller: _facturaController,
+                    decoration: const InputDecoration(labelText: 'FACTURA'),
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _domicilioController,
+                    decoration: const InputDecoration(labelText: 'DOMICILIO'),
+                    // --- NUEVO: Hacerlo de solo lectura si se autocompleta ---
+                    readOnly: _domicilioController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _ciudadController,
+                    decoration: const InputDecoration(labelText: 'CIUDAD'),
+                    // --- NUEVO: Hacerlo de solo lectura si se autocompleta ---
+                    readOnly: _ciudadController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _condicionesController,
+                    decoration: const InputDecoration(labelText: 'CONDICIONES'),
+                    textInputAction: TextInputAction.done),
+              ]),
+            ),
             isActive: _currentStep >= 1,
           ),
           Step(
             title: const Text('Transportista'),
-            content: SingleChildScrollView(child: Column(children: [
-              TextFormField(controller: _operadorController, decoration: const InputDecoration(labelText: 'OPERADOR'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _trailerController, decoration: const InputDecoration(labelText: 'TRAILER'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _placasController, decoration: const InputDecoration(labelText: 'PLACAS'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _cajaController, decoration: const InputDecoration(labelText: 'CAJA'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _lineaTransportistaController, decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _telController, decoration: const InputDecoration(labelText: 'TEL. (INCLUIR LADA)'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _importeFleteController, decoration: const InputDecoration(labelText: 'IMPORTE DEL FLETE'), keyboardType: TextInputType.number, textInputAction: TextInputAction.next),
-              TextFormField(controller: _anticipoFleteController, decoration: const InputDecoration(labelText: 'ANTICIPO DEL FLETE'), keyboardType: TextInputType.number, textInputAction: TextInputAction.next),
-              TextFormField(controller: _cartaPorteNoController, decoration: const InputDecoration(labelText: 'CARTA PORTE No.'), textInputAction: TextInputAction.next),
-              TextFormField(controller: _ctaChequesTransportistaController, decoration: const InputDecoration(labelText: 'No. CTA CHEQUES TRANSPORTISTA'), textInputAction: TextInputAction.done),
-            ])),
+            // --- MODIFICADO: Envolver en Form ---
+            content: Form(
+              key: _formKeyStep2,
+              child: SingleChildScrollView(
+                  child: Column(children: [
+                // --- MODIFICADO: Reemplazado con Autocomplete ---
+                 Autocomplete<Operator>(
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    return _searchOperators(textEditingValue.text);
+                  },
+                  displayStringForOption: (Operator option) => option.name,
+                  onSelected: (Operator selection) {
+                    setState(() {
+                      _operadorController.text = selection.name;
+                      _trailerController.text = selection.trailer;
+                      _placasController.text = selection.placas;
+                      _cajaController.text = selection.caja;
+                      _lineaTransportistaController.text = selection.lineaTransportista;
+                      _telController.text = selection.tel;
+                    });
+                    FocusScope.of(context).nextFocus();
+                  },
+                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (textEditingController.text != _operadorController.text) {
+                        textEditingController.text = _operadorController.text;
+                      }
+                    });
+                    
+                    return TextFormField(
+                      controller: textEditingController, // Usar el controlador del builder
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(labelText: 'OPERADOR'),
+                      textInputAction: TextInputAction.next,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Este campo es obligatorio';
+                        return null;
+                      },
+                      onChanged: (value) {
+                        _operadorController.text = value;
+                      },
+                    );
+                  },
+                ),
+                TextFormField(
+                    controller: _trailerController,
+                    decoration: const InputDecoration(labelText: 'TRAILER'),
+                    readOnly: _trailerController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _placasController,
+                    decoration: const InputDecoration(labelText: 'PLACAS'),
+                    readOnly: _placasController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _cajaController,
+                    decoration: const InputDecoration(labelText: 'CAJA'),
+                    readOnly: _cajaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _lineaTransportistaController,
+                    decoration:
+                        const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
+                    readOnly: _lineaTransportistaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _telController,
+                    decoration:
+                        const InputDecoration(labelText: 'TEL. (INCLUIR LADA)'),
+                    readOnly: _telController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _importeFleteController,
+                    decoration:
+                        const InputDecoration(labelText: 'IMPORTE DEL FLETE'),
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _anticipoFleteController,
+                    decoration:
+                        const InputDecoration(labelText: 'ANTICIPO DEL FLETE'),
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _cartaPorteNoController,
+                    decoration: const InputDecoration(labelText: 'CARTA PORTE No.'),
+                    textInputAction: TextInputAction.next),
+                TextFormField(
+                    controller: _ctaChequesTransportistaController,
+                    decoration: const InputDecoration(
+                        labelText: 'No. CTA CHEQUES TRANSPORTISTA'),
+                    textInputAction: TextInputAction.done),
+              ])),
+            ),
             isActive: _currentStep >= 2,
           ),
           Step(
@@ -420,7 +794,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
           Step(
             title: const Text('Firmas'),
-            content: _buildSignatureSection(),
+            // --- MODIFICADO: Envolver en Form ---
+            content: Form(
+              key: _formKeyStep4,
+              child: _buildSignatureSection()
+            ),
             isActive: _currentStep >= 4,
           ),
           Step(
@@ -430,7 +808,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
         ],
       ),
-      floatingActionButton: _isLoading ? const CircularProgressIndicator() : null,
+      floatingActionButton:
+          _isLoading ? const CircularProgressIndicator() : null,
     );
   }
 
@@ -447,83 +826,198 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               margin: const EdgeInsets.symmetric(vertical: 8),
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Producto ${index + 1}', style: Theme.of(context).textTheme.titleMedium),
-                        if (_cargaItemControllers.length > 1) IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _removeCargaItem(index))
-                      ],
-                    ),
-                    TextFormField(controller: controllers.producto, focusNode: controllers.productoNode, decoration: const InputDecoration(labelText: 'Producto'), onEditingComplete: () => controllers.etiquetasNode.requestFocus(), textInputAction: TextInputAction.next),
-                    TextFormField(controller: controllers.etiquetas, focusNode: controllers.etiquetasNode, decoration: const InputDecoration(labelText: 'Etiquetas'), onEditingComplete: () => controllers.tamanoNode.requestFocus(), textInputAction: TextInputAction.next),
-                    TextFormField(controller: controllers.tamano, focusNode: controllers.tamanoNode, decoration: const InputDecoration(labelText: 'Tamaño'), onEditingComplete: () => controllers.palletsNode.requestFocus(), textInputAction: TextInputAction.next),
-                    Row(
-                      children: [
-                        Expanded(child: TextFormField(controller: controllers.pallets, focusNode: controllers.palletsNode, decoration: const InputDecoration(labelText: 'No. Pallets'), keyboardType: TextInputType.number, onEditingComplete: () => controllers.cajasPorPalletNode.requestFocus(), textInputAction: TextInputAction.next)),
-                        const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text('x')),
-                        Expanded(child: TextFormField(controller: controllers.cajasPorPallet, focusNode: controllers.cajasPorPalletNode, decoration: const InputDecoration(labelText: 'Cajas x Pallet'), keyboardType: TextInputType.number, textInputAction: TextInputAction.done)),
-                      ],
-                    ),
-                    TextFormField(controller: controllers.cajas, decoration: const InputDecoration(labelText: 'Cajas (Total)'), readOnly: true),
-                  ],
+                // --- MODIFICADO: Envolver en Form ---
+                child: Form(
+                  key: controllers.formKey, // Asignar la key de la fila
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Producto ${index + 1}',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          if (_cargaItemControllers.length > 1)
+                            IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _removeCargaItem(index))
+                        ],
+                      ),
+                      TextFormField(
+                        controller: controllers.producto,
+                        focusNode: controllers.productoNode,
+                        decoration: const InputDecoration(labelText: 'Producto'),
+                        onEditingComplete: () =>
+                            controllers.etiquetasNode.requestFocus(),
+                        textInputAction: TextInputAction.next,
+                        // --- NUEVO: Validador ---
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Obligatorio';
+                          return null;
+                        },
+                      ),
+                      TextFormField(
+                          controller: controllers.etiquetas,
+                          focusNode: controllers.etiquetasNode,
+                          decoration:
+                              const InputDecoration(labelText: 'Etiquetas'),
+                          onEditingComplete: () =>
+                              controllers.tamanoNode.requestFocus(),
+                          textInputAction: TextInputAction.next),
+                      TextFormField(
+                          controller: controllers.tamano,
+                          focusNode: controllers.tamanoNode,
+                          decoration: const InputDecoration(labelText: 'Tamaño'),
+                          onEditingComplete: () =>
+                              controllers.palletsNode.requestFocus(),
+                          textInputAction: TextInputAction.next),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: TextFormField(
+                                  controller: controllers.pallets,
+                                  focusNode: controllers.palletsNode,
+                                  decoration: const InputDecoration(
+                                      labelText: 'No. Pallets'),
+                                  keyboardType: TextInputType.number,
+                                  onEditingComplete: () => controllers
+                                      .cajasPorPalletNode
+                                      .requestFocus(),
+                                  textInputAction: TextInputAction.next,
+                                  // --- NUEVO: Validador ---
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) return 'Obligatorio';
+                                    if ((int.tryParse(value) ?? 0) <= 0) return 'Debe ser > 0';
+                                    return null;
+                                  },
+                                )),
+                          const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Text('x')),
+                          Expanded(
+                              child: TextFormField(
+                                  controller: controllers.cajasPorPallet,
+                                  focusNode: controllers.cajasPorPalletNode,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Cajas x Pallet'),
+                                  keyboardType: TextInputType.number,
+                                  textInputAction: TextInputAction.done,
+                                  // --- NUEVO: ValidadFdor ---
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) return 'Obligatorio';
+                                    if ((int.tryParse(value) ?? 0) <= 0) return 'Debe ser > 0';
+                                    return null;
+                                  },
+                                )),
+                        ],
+                      ),
+                      TextFormField(
+                          controller: controllers.cajas,
+                          decoration:
+                              const InputDecoration(labelText: 'Cajas (Total)'),
+                          readOnly: true),
+                    ],
+                  ),
                 ),
               ),
             );
           },
         ),
         const SizedBox(height: 8),
-        TextButton.icon(icon: const Icon(Icons.add), label: const Text('Añadir Producto'), onPressed: () => _addCargaItem()),
+        TextButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Añadir Producto'),
+            onPressed: () => _addCargaItem()),
         const Divider(height: 32),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Text('TOTALES: ', style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(width: 80, child: Text('$_totalPallets p.', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold))),
-              SizedBox(width: 80, child: Text('$_totalCajas', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold))),
+              const Text('TOTALES: ',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(
+                  width: 80,
+                  child: Text('$_totalPallets p.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold))),
+              SizedBox(
+                  width: 80,
+                  child: Text('$_totalCajas',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold))),
             ],
           ),
         )
       ],
     );
   }
-  
+
   Widget _buildSignatureSection() {
     return SingleChildScrollView(
       child: Column(
         children: [
-          TextFormField(controller: _observacionesController, decoration: const InputDecoration(labelText: 'OBSERVACIONES'), maxLines: 3),
+          TextFormField(
+              controller: _observacionesController,
+              decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
+              maxLines: 3),
           const SizedBox(height: 24),
-          _buildSignaturePad(title: 'EMBARCÓ (Nombre y Firma)', nameController: _embarcoNombreController, signatureController: _embarcoSignatureController),
+          _buildSignaturePad(
+              title: 'EMBARCÓ (Nombre y Firma)',
+              nameController: _embarcoNombreController,
+              signatureController: _embarcoSignatureController),
           const SizedBox(height: 24),
-          _buildSignaturePad(title: 'RECIBIÓ (NOMBRE y FIRMA)', nameController: _recibioNombreController, signatureController: _recibioSignatureController),
+          _buildSignaturePad(
+              title: 'RECIBIÓ (NOMBRE y FIRMA)',
+              nameController: _recibioNombreController,
+              signatureController: _recibioSignatureController),
         ],
       ),
     );
   }
 
-  Widget _buildSignaturePad({required String title, required TextEditingController nameController, required SignatureController signatureController}) {
+  Widget _buildSignaturePad(
+      {required String title,
+      required TextEditingController nameController,
+      required SignatureController signatureController}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Container(
-          decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
-          child: Signature(controller: signatureController, height: 150, backgroundColor: Colors.grey[200]!),
+          decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(8)),
+          child: Signature(
+              controller: signatureController,
+              height: 150,
+              backgroundColor: Colors.grey[200]!),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            IconButton(icon: const Icon(Icons.undo), onPressed: () => signatureController.undo()),
-            IconButton(icon: const Icon(Icons.redo), onPressed: () => signatureController.redo()),
-            IconButton(icon: const Icon(Icons.clear), onPressed: () => signatureController.clear()),
+            IconButton(
+                icon: const Icon(Icons.undo),
+                onPressed: () => signatureController.undo()),
+            IconButton(
+                icon: const Icon(Icons.redo),
+                onPressed: () => signatureController.redo()),
+            IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () => signatureController.clear()),
           ],
         ),
-        TextFormField(controller: nameController, decoration: const InputDecoration(labelText: 'Nombre')),
+        TextFormField(
+          controller: nameController,
+          decoration: const InputDecoration(labelText: 'Nombre'),
+          // --- NUEVO: Validador ---
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'El nombre es obligatorio';
+            }
+            return null;
+          },
+        ),
       ],
     );
   }
@@ -531,14 +1025,25 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   Widget _buildTrailerDiagram() {
     return Column(
       children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [Text('DIFUSOR'), Text('PUERTAS')]),
+        Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [Text('DIFUSOR'), Text('PUERTAS')]),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 3,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4),
           itemCount: 30,
           itemBuilder: (context, index) {
-            return TextFormField(controller: _trailerLayoutControllers[index], decoration: InputDecoration(border: const OutlineInputBorder(), labelText: '${index + 1}'), textAlign: TextAlign.center);
+            return TextFormField(
+                controller: _trailerLayoutControllers[index],
+                decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: '${index + 1}'),
+                textAlign: TextAlign.center);
           },
         ),
       ],
