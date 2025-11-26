@@ -1,37 +1,34 @@
-// NUEVO ARCHIVO: Modelo para la tabla de Clientes
-// Contiene solo los 3 campos que solicitaste.
-
+// lib/models/client.dart
 class Client {
   final String? id;
   final String name;
-  final String? address;
-  final String? city;
-  final DateTime? createdAt;
+  final String domicilio;
+  final String ciudad;
 
   Client({
     this.id,
     required this.name,
-    this.address,
-    this.city,
-    this.createdAt,
+    this.domicilio = '',
+    this.ciudad = '',
   });
 
+  // Lee desde un mapa de Supabase (JSON)
   factory Client.fromMap(Map<String, dynamic> map) {
     return Client(
-      id: map['id'],
-      name: map['name'] ?? '',
-      address: map['address'],
-      city: map['city'],
-      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
+      id: map['id'] as String?,
+      name: map['name'] as String? ?? '',
+      domicilio: map['domicilio'] as String? ?? '',
+      ciudad: map['ciudad'] as String? ?? '',
     );
   }
 
+  // Escribe a un mapa para Supabase (JSON)
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'address': address,
-      'city': city,
+      'domicilio': domicilio,
+      'ciudad': ciudad,
     };
   }
 }

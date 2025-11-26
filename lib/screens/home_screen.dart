@@ -59,8 +59,7 @@ class HomeScreen extends StatelessWidget {
             icon: Icons.local_shipping,
             label: 'Operadores',
             onPressed: () {
-              // TODO: Crear y navegar a la pantalla de Operadores
-            },
+              Navigator.of(context).pushNamed('/operators');            },
           ),
           _MenuButton(
             icon: Icons.badge,

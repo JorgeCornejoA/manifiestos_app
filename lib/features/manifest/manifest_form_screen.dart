@@ -6,67 +6,11 @@ import 'package:printing/printing.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
 
-// --- NUEVO: Modelos de ejemplo para Autocomplete ---
-class Client {
-  final String id;
-  final String name;
-  final String domicilio;
-  final String ciudad;
-
-  Client({
-    required this.id,
-    required this.name,
-    required this.domicilio,
-    required this.ciudad,
-  });
-
-  // --- MODIFICADO: Se añade control de nulos con (as String? ?? '') ---
-  factory Client.fromJson(Map<String, dynamic> json) {
-    return Client(
-      // Si el valor es nulo en Supabase, usará un string vacío ''
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      domicilio: json['domicilio'] as String? ?? '',
-      ciudad: json['ciudad'] as String? ?? '',
-    );
-  }
-}
-
-class Operator {
-  final String id;
-  final String name;
-  final String trailer;
-  final String placas;
-  final String caja;
-  final String lineaTransportista;
-  final String tel;
-
-  Operator({
-    required this.id,
-    required this.name,
-    required this.trailer,
-    required this.placas,
-    required this.caja,
-    required this.lineaTransportista,
-    required this.tel,
-  });
-
-  // --- MODIFICADO: Se añade control de nulos con (as String? ?? '') ---
-  factory Operator.fromJson(Map<String, dynamic> json) {
-    return Operator(
-      // Si el valor es nulo en Supabase, usará un string vacío ''
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      trailer: json['trailer'] as String? ?? '',
-      placas: json['placas'] as String? ?? '',
-      caja: json['caja'] as String? ?? '',
-      // Mantenemos tu corrección de 'linea_transportista'
-      lineaTransportista: json['linea_transportista'] as String? ?? '',
-      tel: json['tel'] as String? ?? '',
-    );
-  }
-}
-// --- Fin de Modelos ---
+// --- NUEVO: Imports de los modelos ---
+// Se eliminaron las clases Client y Operator que estaban aquí
+import 'package:manifiestos_app/models/client.dart';
+import 'package:manifiestos_app/models/operator.dart';
+// --- Fin de imports ---
 
 // Helper class to manage controllers and focus nodes for each CargaItem
 class _CargaItemControllers {
@@ -92,8 +36,8 @@ class _CargaItemControllers {
         pallets = TextEditingController(text: item.pallets.toString()),
         cajasPorPallet =
             TextEditingController(text: item.cajasPorPallet.toString()),
-        cajas =
-            TextEditingController(text: (item.pallets * item.cajasPorPallet).toString()),
+        cajas = TextEditingController(
+            text: (item.pallets * item.cajasPorPallet).toString()),
         productoNode = FocusNode(),
         etiquetasNode = FocusNode(),
         tamanoNode = FocusNode(),
@@ -127,6 +71,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   int _currentStep = 0;
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = false;
+
+  Client? _selectedClient;
+  Operator? _selectedOperator;
 
   // --- NUEVO: Keys para validar cada paso del Stepper ---
   final _formKeyStep0 = GlobalKey<FormState>();
@@ -192,7 +139,20 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     try {
       return DateFormat('dd-MMM-yyyy', 'es_ES').format(date).toUpperCase();
     } catch (e) {
-      const months = [ 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC' ];
+      const months = [
+        'ENE',
+        'FEB',
+        'MAR',
+        'ABR',
+        'MAY',
+        'JUN',
+        'JUL',
+        'AGO',
+        'SEP',
+        'OCT',
+        'NOV',
+        'DIC'
+      ];
       final day = date.day.toString().padLeft(2, '0');
       final month = months[date.month - 1];
       final year = date.year;
@@ -337,17 +297,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     super.dispose();
   }
 
-  // --- NUEVO: Funciones de búsqueda para Autocomplete ---
-  
+  // --- Funciones de búsqueda para Autocomplete ---
+
   Future<Iterable<Client>> _searchClients(String query) async {
     if (query.isEmpty) {
       return const Iterable.empty();
     }
     try {
-      final data = await _supabaseService.searchClients(query); 
-      // Aquí es donde el .fromJson() se llama.
-      // Si falla, verás un error en la consola de depuración.
-      return data.map((json) => Client.fromJson(json));
+      final data = await _supabaseService.searchClients(query);
+      // Ahora usa Client.fromMap del archivo importado
+      return data.map((json) => Client.fromMap(json));
     } catch (e) {
       _showErrorSnackbar('Error al buscar clientes: $e');
       return const Iterable.empty();
@@ -360,15 +319,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
     try {
       final data = await _supabaseService.searchOperators(query);
-      // Aquí es donde el .fromJson() se llama.
-      return data.map((json) => Operator.fromJson(json));
+      // Ahora usa Operator.fromMap del archivo importado
+      return data.map((json) => Operator.fromMap(json));
     } catch (e) {
       _showErrorSnackbar('Error al buscar operadores: $e');
       return const Iterable.empty();
     }
   }
 
-  // --- NUEVO: Helper para mostrar errores ---
+  // --- Helper para mostrar errores ---
   void _showErrorSnackbar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -377,21 +336,19 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     ));
   }
 
-  // --- MODIFICADO: Lógica de validación en onStepContinue ---
+  // --- Lógica de validación en onStepContinue ---
   void _onStepContinue() {
     bool isValid = true;
 
     // Validar el paso actual
     if (_currentStep == 0) {
       isValid = _formKeyStep0.currentState!.validate();
-    } 
-    else if (_currentStep == 1) {
+    } else if (_currentStep == 1) {
       isValid = _formKeyStep1.currentState!.validate();
-    } 
-    else if (_currentStep == 2) {
+    } else if (_currentStep == 2) {
       isValid = _formKeyStep2.currentState!.validate();
-    } 
-    else if (_currentStep == 3) { // Validación de Carga
+    } else if (_currentStep == 3) {
+      // Validación de Carga
       if (_cargaItemControllers.isEmpty) {
         isValid = false;
         _showErrorSnackbar('Debe añadir al menos un producto a la carga.');
@@ -403,11 +360,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           }
         }
         if (!isValid) {
-          _showErrorSnackbar('Complete todos los campos obligatorios de la carga (Producto, Pallets, Cajas).');
+          _showErrorSnackbar(
+              'Complete todos los campos obligatorios de la carga (Producto, Pallets, Cajas).');
         }
       }
-    } 
-    else if (_currentStep == 4) { // Validación de Firmas
+    } else if (_currentStep == 4) {
+      // Validación de Firmas
       isValid = _formKeyStep4.currentState!.validate(); // Valida los nombres
       if (_embarcoSignatureController.isEmpty) {
         isValid = false;
@@ -424,9 +382,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         setState(() => _currentStep += 1);
       } else {
         // --- NUEVO: Validación del último paso (Diagrama) antes de guardar ---
-        final isDiagramEmpty = _trailerLayoutControllers.values.every((c) => c.text.isEmpty);
+        final isDiagramEmpty =
+            _trailerLayoutControllers.values.every((c) => c.text.isEmpty);
         if (isDiagramEmpty) {
-          _showErrorSnackbar('Debe rellenar al menos una posición en el diagrama.');
+          _showErrorSnackbar(
+              'Debe rellenar al menos una posición en el diagrama.');
         } else {
           // Todos los pasos son válidos, proceder a guardar
           _generateAndSavePdf();
@@ -434,11 +394,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       }
     }
   }
-  
+
   void _onStepCancel() {
-     if (_currentStep > 0) {
+    if (_currentStep > 0) {
       setState(() => _currentStep -= 1);
-     }
+    }
   }
 
   Future<void> _generateAndSavePdf() async {
@@ -450,7 +410,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final layoutMap = <String, String>{};
       _trailerLayoutControllers.forEach((key, controller) {
-        if (controller.text.isNotEmpty) layoutMap[key.toString()] = controller.text;
+        if (controller.text.isNotEmpty)
+          layoutMap[key.toString()] = controller.text;
       });
 
       final cargaItems = _cargaItemControllers.map((controllers) {
@@ -496,7 +457,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final manifestId = await _supabaseService.saveManifest(data);
 
-      if (manifestId == null) throw Exception("Error al guardar el manifiesto en la base de datos.");
+      if (manifestId == null)
+        throw Exception("Error al guardar el manifiesto en la base de datos.");
 
       final pdfBytes = await PdfGenerator.generatePdfBytes(data);
       final fileName = 'manifiesto-$manifestId.pdf';
@@ -532,7 +494,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       body: Stepper(
         type: StepperType.horizontal,
         currentStep: _currentStep,
-        // --- MODIFICADO: Usar funciones personalizadas ---
         onStepContinue: _onStepContinue,
         onStepCancel: _onStepCancel,
         controlsBuilder: (context, details) {
@@ -552,8 +513,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     icon: isLastStep
                         ? const Icon(Icons.picture_as_pdf)
                         : const Icon(Icons.arrow_forward),
-                    label: Text(
-                        isLastStep ? 'GUARDAR Y GENERAR' : 'SIGUIENTE'),
+                    label: Text(isLastStep ? 'GUARDAR Y GENERAR' : 'SIGUIENTE'),
                     onPressed: details.onStepContinue),
               ],
             ),
@@ -562,7 +522,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         steps: [
           Step(
             title: const Text('Info General'),
-            // --- MODIFICADO: Envolver en Form ---
             content: Form(
               key: _formKeyStep0,
               child: Column(children: [
@@ -570,7 +529,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   controller: _trailerNoController,
                   decoration: const InputDecoration(labelText: 'TRAILER No.'),
                   textInputAction: TextInputAction.next,
-                  // --- NUEVO: Validador ---
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Este campo es obligatorio';
@@ -582,7 +540,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   controller: _productorController,
                   decoration: const InputDecoration(labelText: 'PRODUCTOR'),
                   textInputAction: TextInputAction.next,
-                  // --- NUEVO: Validador ---
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Este campo es obligatorio';
@@ -592,8 +549,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 ),
                 TextFormField(
                     controller: _certificadoOrigenController,
-                    decoration:
-                        const InputDecoration(labelText: 'CERTIFICADO DE ORIGEN'),
+                    decoration: const InputDecoration(
+                        labelText: 'CERTIFICADO DE ORIGEN'),
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _guiaFitosanitariaController,
@@ -607,7 +564,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       suffixIcon: Icon(Icons.calendar_today)),
                   readOnly: true,
                   onTap: _selectDate,
-                  // --- NUEVO: Validador ---
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Este campo es obligatorio';
@@ -621,46 +577,65 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
           Step(
             title: const Text('Destino'),
-            // --- MODIFICADO: Envolver en Form ---
             content: Form(
               key: _formKeyStep1,
               child: Column(children: [
-                // --- MODIFICADO: Reemplazado con Autocomplete ---
                 Autocomplete<Client>(
                   optionsBuilder: (TextEditingValue textEditingValue) {
-                    // El valor del controller se pasa automáticamente
                     return _searchClients(textEditingValue.text);
                   },
                   displayStringForOption: (Client option) => option.name,
                   onSelected: (Client selection) {
                     setState(() {
+                      _selectedClient = selection;
                       _consignadoAController.text = selection.name;
                       _domicilioController.text = selection.domicilio;
                       _ciudadController.text = selection.ciudad;
                     });
                     FocusScope.of(context).nextFocus(); // Mover foco
                   },
-                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-                    // Sincronizar el controlador de estado con el que provee el Autocomplete
-                    // Esto es necesario para que _loadManifestData funcione
+                  fieldViewBuilder: (context, textEditingController, focusNode,
+                      onFieldSubmitted) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                       if (textEditingController.text != _consignadoAController.text) {
-                         textEditingController.text = _consignadoAController.text;
-                       }
+                      if (textEditingController.text !=
+                          _consignadoAController.text) {
+                        textEditingController.text =
+                            _consignadoAController.text;
+                      }
                     });
 
                     return TextFormField(
-                      controller: textEditingController, // Usar el controlador del builder
+                      controller: textEditingController,
                       focusNode: focusNode,
-                      decoration: const InputDecoration(labelText: 'CONSIGNADO A'),
+                      decoration:
+                          const InputDecoration(labelText: 'CONSIGNADO A'),
                       textInputAction: TextInputAction.next,
                       validator: (value) {
-                        if (value == null || value.isEmpty) return 'Este campo es obligatorio';
+                        if (value == null || value.isEmpty)
+                          return 'Este campo es obligatorio';
                         return null;
                       },
                       onChanged: (value) {
-                        // Sincronizar de vuelta al controlador de estado
                         _consignadoAController.text = value;
+
+                        // --- 2. LÓGICA DE LIMPIEZA ESTRICTA ---
+                        // Si teníamos un cliente seleccionado, pero el texto nuevo
+                        // YA NO COINCIDE con el nombre de ese cliente...
+                        if (_selectedClient != null &&
+                            value != _selectedClient!.name) {
+                          setState(() {
+                            _selectedClient = null; // Olvidamos la selección
+                            _domicilioController.clear(); // Borramos datos
+                            _ciudadController.clear();
+                          });
+                        }
+
+                        if (value.isEmpty) {
+                          setState(() {
+                            _domicilioController.clear();
+                            _ciudadController.clear();
+                          });
+                        }
                       },
                     );
                   },
@@ -672,14 +647,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 TextFormField(
                     controller: _domicilioController,
                     decoration: const InputDecoration(labelText: 'DOMICILIO'),
-                    // --- NUEVO: Hacerlo de solo lectura si se autocompleta ---
-                    readOnly: _domicilioController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
+                    readOnly: _domicilioController.text.isNotEmpty &&
+                        _consignadoAController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _ciudadController,
                     decoration: const InputDecoration(labelText: 'CIUDAD'),
-                    // --- NUEVO: Hacerlo de solo lectura si se autocompleta ---
-                    readOnly: _ciudadController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
+                    readOnly: _ciudadController.text.isNotEmpty &&
+                        _consignadoAController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _condicionesController,
@@ -691,46 +666,76 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
           Step(
             title: const Text('Transportista'),
-            // --- MODIFICADO: Envolver en Form ---
             content: Form(
               key: _formKeyStep2,
               child: SingleChildScrollView(
                   child: Column(children: [
-                // --- MODIFICADO: Reemplazado con Autocomplete ---
-                 Autocomplete<Operator>(
+                Autocomplete<Operator>(
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     return _searchOperators(textEditingValue.text);
                   },
                   displayStringForOption: (Operator option) => option.name,
                   onSelected: (Operator selection) {
                     setState(() {
+                      _selectedOperator =
+                          selection; // <--- 1. GUARDAMOS LA SELECCIÓN
                       _operadorController.text = selection.name;
                       _trailerController.text = selection.trailer;
                       _placasController.text = selection.placas;
                       _cajaController.text = selection.caja;
-                      _lineaTransportistaController.text = selection.lineaTransportista;
+                      _lineaTransportistaController.text =
+                          selection.lineaTransportista;
                       _telController.text = selection.tel;
                     });
                     FocusScope.of(context).nextFocus();
                   },
-                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                  fieldViewBuilder: (context, textEditingController, focusNode,
+                      onFieldSubmitted) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (textEditingController.text != _operadorController.text) {
+                      if (textEditingController.text !=
+                          _operadorController.text) {
                         textEditingController.text = _operadorController.text;
                       }
                     });
-                    
+
                     return TextFormField(
-                      controller: textEditingController, // Usar el controlador del builder
+                      controller: textEditingController,
                       focusNode: focusNode,
                       decoration: const InputDecoration(labelText: 'OPERADOR'),
                       textInputAction: TextInputAction.next,
                       validator: (value) {
-                        if (value == null || value.isEmpty) return 'Este campo es obligatorio';
+                        if (value == null || value.isEmpty)
+                          return 'Este campo es obligatorio';
                         return null;
                       },
                       onChanged: (value) {
                         _operadorController.text = value;
+
+                        // --- 2. LÓGICA DE LIMPIEZA ESTRICTA ---
+                        // Si teníamos un operador seleccionado, pero el texto nuevo
+                        // YA NO COINCIDE con el nombre de ese operador...
+                        if (_selectedOperator != null &&
+                            value != _selectedOperator!.name) {
+                          setState(() {
+                            _selectedOperator = null; // Olvidamos la selección
+                            _trailerController
+                                .clear(); // Borramos TODOS los datos dependientes
+                            _placasController.clear();
+                            _cajaController.clear();
+                            _lineaTransportistaController.clear();
+                            _telController.clear();
+                          });
+                        }
+
+                        if (value.isEmpty) {
+                          setState(() {
+                            _trailerController.clear();
+                            _placasController.clear();
+                            _cajaController.clear();
+                            _lineaTransportistaController.clear();
+                            _telController.clear();
+                          });
+                        }
                       },
                     );
                   },
@@ -738,29 +743,34 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 TextFormField(
                     controller: _trailerController,
                     decoration: const InputDecoration(labelText: 'TRAILER'),
-                    readOnly: _trailerController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    readOnly: _trailerController.text.isNotEmpty &&
+                        _operadorController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _placasController,
                     decoration: const InputDecoration(labelText: 'PLACAS'),
-                    readOnly: _placasController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    readOnly: _placasController.text.isNotEmpty &&
+                        _operadorController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _cajaController,
                     decoration: const InputDecoration(labelText: 'CAJA'),
-                    readOnly: _cajaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    readOnly: _cajaController.text.isNotEmpty &&
+                        _operadorController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _lineaTransportistaController,
                     decoration:
                         const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
-                    readOnly: _lineaTransportistaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    readOnly: _lineaTransportistaController.text.isNotEmpty &&
+                        _operadorController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _telController,
                     decoration:
                         const InputDecoration(labelText: 'TEL. (INCLUIR LADA)'),
-                    readOnly: _telController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                    readOnly: _telController.text.isNotEmpty &&
+                        _operadorController.text.isNotEmpty,
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _importeFleteController,
@@ -776,7 +786,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _cartaPorteNoController,
-                    decoration: const InputDecoration(labelText: 'CARTA PORTE No.'),
+                    decoration:
+                        const InputDecoration(labelText: 'CARTA PORTE No.'),
                     textInputAction: TextInputAction.next),
                 TextFormField(
                     controller: _ctaChequesTransportistaController,
@@ -794,11 +805,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
           Step(
             title: const Text('Firmas'),
-            // --- MODIFICADO: Envolver en Form ---
-            content: Form(
-              key: _formKeyStep4,
-              child: _buildSignatureSection()
-            ),
+            content: Form(key: _formKeyStep4, child: _buildSignatureSection()),
             isActive: _currentStep >= 4,
           ),
           Step(
@@ -826,7 +833,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               margin: const EdgeInsets.symmetric(vertical: 8),
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
-                // --- MODIFICADO: Envolver en Form ---
                 child: Form(
                   key: controllers.formKey, // Asignar la key de la fila
                   child: Column(
@@ -838,20 +844,22 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                               style: Theme.of(context).textTheme.titleMedium),
                           if (_cargaItemControllers.length > 1)
                             IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
+                                icon:
+                                    const Icon(Icons.delete, color: Colors.red),
                                 onPressed: () => _removeCargaItem(index))
                         ],
                       ),
                       TextFormField(
                         controller: controllers.producto,
                         focusNode: controllers.productoNode,
-                        decoration: const InputDecoration(labelText: 'Producto'),
+                        decoration:
+                            const InputDecoration(labelText: 'Producto'),
                         onEditingComplete: () =>
                             controllers.etiquetasNode.requestFocus(),
                         textInputAction: TextInputAction.next,
-                        // --- NUEVO: Validador ---
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Obligatorio';
+                          if (value == null || value.isEmpty)
+                            return 'Obligatorio';
                           return null;
                         },
                       ),
@@ -866,7 +874,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       TextFormField(
                           controller: controllers.tamano,
                           focusNode: controllers.tamanoNode,
-                          decoration: const InputDecoration(labelText: 'Tamaño'),
+                          decoration:
+                              const InputDecoration(labelText: 'Tamaño'),
                           onEditingComplete: () =>
                               controllers.palletsNode.requestFocus(),
                           textInputAction: TextInputAction.next),
@@ -874,40 +883,41 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         children: [
                           Expanded(
                               child: TextFormField(
-                                  controller: controllers.pallets,
-                                  focusNode: controllers.palletsNode,
-                                  decoration: const InputDecoration(
-                                      labelText: 'No. Pallets'),
-                                  keyboardType: TextInputType.number,
-                                  onEditingComplete: () => controllers
-                                      .cajasPorPalletNode
-                                      .requestFocus(),
-                                  textInputAction: TextInputAction.next,
-                                  // --- NUEVO: Validador ---
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) return 'Obligatorio';
-                                    if ((int.tryParse(value) ?? 0) <= 0) return 'Debe ser > 0';
-                                    return null;
-                                  },
-                                )),
+                            controller: controllers.pallets,
+                            focusNode: controllers.palletsNode,
+                            decoration:
+                                const InputDecoration(labelText: 'No. Pallets'),
+                            keyboardType: TextInputType.number,
+                            onEditingComplete: () =>
+                                controllers.cajasPorPalletNode.requestFocus(),
+                            textInputAction: TextInputAction.next,
+                            validator: (value) {
+                              if (value == null || value.isEmpty)
+                                return 'Obligatorio';
+                              if ((int.tryParse(value) ?? 0) <= 0)
+                                return 'Debe ser > 0';
+                              return null;
+                            },
+                          )),
                           const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 8.0),
                               child: Text('x')),
                           Expanded(
                               child: TextFormField(
-                                  controller: controllers.cajasPorPallet,
-                                  focusNode: controllers.cajasPorPalletNode,
-                                  decoration: const InputDecoration(
-                                      labelText: 'Cajas x Pallet'),
-                                  keyboardType: TextInputType.number,
-                                  textInputAction: TextInputAction.done,
-                                  // --- NUEVO: ValidadFdor ---
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) return 'Obligatorio';
-                                    if ((int.tryParse(value) ?? 0) <= 0) return 'Debe ser > 0';
-                                    return null;
-                                  },
-                                )),
+                            controller: controllers.cajasPorPallet,
+                            focusNode: controllers.cajasPorPalletNode,
+                            decoration: const InputDecoration(
+                                labelText: 'Cajas x Pallet'),
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.done,
+                            validator: (value) {
+                              if (value == null || value.isEmpty)
+                                return 'Obligatorio';
+                              if ((int.tryParse(value) ?? 0) <= 0)
+                                return 'Debe ser > 0';
+                              return null;
+                            },
+                          )),
                         ],
                       ),
                       TextFormField(
@@ -1010,7 +1020,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         TextFormField(
           controller: nameController,
           decoration: const InputDecoration(labelText: 'Nombre'),
-          // --- NUEVO: Validador ---
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'El nombre es obligatorio';
