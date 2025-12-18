@@ -1,9 +1,8 @@
 import 'dart:typed_data';
-
 import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/client.dart';
-import 'package:manifiestos_app/models/operator.dart'; // Asegúrate de tener este import
+import 'package:manifiestos_app/models/operator.dart';
 import 'package:uuid/uuid.dart';
 
 class SupabaseService {
@@ -12,10 +11,14 @@ class SupabaseService {
 
   Future<String?> saveManifest(ManifestData data) async {
     try {
-      String? embarcoFirmaUrl;
-      String? recibioFirmaUrl;
       final manifestId = data.id ?? _uuid.v4();
 
+      // --- CORRECCIÓN: Inicializar con la URL existente ---
+      // Antes estaba en null, por eso borraba la firma si no la cambiabas.
+      String? embarcoFirmaUrl = data.embarcoFirmaUrl;
+      String? recibioFirmaUrl = data.recibioFirmaUrl;
+
+      // Solo si hay bytes NUEVOS, subimos y actualizamos la URL
       if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
         final path = 'signatures/$manifestId/embarco_firma.png';
         await _supabase.storage.from('manifests').uploadBinary(
@@ -37,10 +40,12 @@ class SupabaseService {
       }
 
       final manifestMap = data.toMap();
+      // Guardamos la URL correcta (la nueva o la que ya existía)
       manifestMap['embarco_firma_url'] = embarcoFirmaUrl;
       manifestMap['recibio_firma_url'] = recibioFirmaUrl;
       
-      // No incluimos 'pdf_url' aquí porque se actualiza DESPUÉS de subir el PDF
+      // Eliminamos pdf_url del mapa para no borrarlo accidentalmente al editar
+      manifestMap.remove('pdf_url');
 
       final id = data.id;
       if (id == null) {
@@ -57,6 +62,16 @@ class SupabaseService {
     }
   }
 
+  // --- (El resto de tu archivo sigue exactamente igual) ---
+  Future<void> deleteManifest(String id) async {
+    try {
+      await _supabase.from('manifests').delete().eq('id', id);
+    } catch (e) {
+      print('Error al eliminar manifiesto: $e');
+      throw Exception('No se pudo eliminar el manifiesto: $e');
+    }
+  }
+
   Future<List<ManifestData>> getManifests() async {
     try {
       final response = await _supabase.from('manifests').select();
@@ -69,7 +84,6 @@ class SupabaseService {
     }
   }
   
-  // MODIFICACIÓN: uploadPdf ahora devuelve la URL pública del archivo subido
   Future<String?> uploadPdf(Uint8List pdfBytes, String fileName) async {
     try {
       final path = 'pdfs/$fileName';
@@ -78,16 +92,13 @@ class SupabaseService {
             pdfBytes,
             fileOptions: const FileOptions(upsert: true),
           );
-      // Devuelve la URL pública
       return _supabase.storage.from('manifests').getPublicUrl(path);
     } catch (e) {
-      // ignore: avoid_print
       print('Error al subir PDF: $e');
       return null;
     }
   }
 
-  // MODIFICACIÓN: Nueva función para actualizar el manifiesto con la URL del PDF
   Future<void> updatePdfUrl(String manifestId, String pdfUrl) async {
     try {
       await _supabase
@@ -95,40 +106,31 @@ class SupabaseService {
           .update({'pdf_url': pdfUrl})
           .eq('id', manifestId);
     } catch (e) {
-      // ignore: avoid_print
       print('Error al actualizar PDF URL: $e');
     }
   }
 
-  // --- NUEVO: MÉTODO PARA BUSCAR CLIENTES ---
   Future<List<Map<String, dynamic>>> searchClients(String query) async {
     try {
       final response = await _supabase
-          .from('clients') // <-- ¡Verifica que 'clients' sea el nombre de tu tabla!
-          .select()       // <-- Selecciona todas las columnas
-          .ilike('name', '%$query%'); // <-- ¡Verifica que 'name' sea tu columna de nombre!
-
+          .from('clients')
+          .select()
+          .ilike('name', '%$query%');
       return response;
-      
     } catch (e) {
-      // ignore: avoid_print
       print('Error en searchClients: $e');
-      return []; // Retorna lista vacía en caso de error
+      return [];
     }
   }
 
-  // --- NUEVO: MÉTODO PARA BUSCAR OPERADORES ---
   Future<List<Map<String, dynamic>>> searchOperators(String query) async {
     try {
       final response = await _supabase
-          .from('operators') // <-- ¡Verifica que 'operators' sea el nombre de tu tabla!
+          .from('operators')
           .select()
-          .ilike('name', '%$query%'); // <-- ¡Verifica que 'name' sea tu columna de nombre!
-
+          .ilike('name', '%$query%');
       return response;
-
     } catch (e) {
-      // ignore: avoid_print
       print('Error en searchOperators: $e');
       return [];
     }
@@ -140,49 +142,38 @@ class SupabaseService {
           .from('clients')
           .select()
           .order('name', ascending: true);
-      
       return response.map((map) => Client.fromMap(map)).toList();
-      
     } catch (e) {
       print('Error en getClients: $e');
       return [];
     }
   }
 
-  /// Crea un nuevo cliente en la base de datos
   Future<void> createClient(Client client) async {
     try {
-      // Quitamos el ID nulo para que Supabase genere uno nuevo
       final map = client.toMap()..remove('id'); 
-      
       await _supabase.from('clients').insert(map);
-
     } catch (e) {
       print('Error en createClient: $e');
-      // Re-lanzamos el error para que el formulario pueda mostrarlo
       throw Exception('Error al crear cliente: $e');
     }
   }
 
-  /// Actualiza un cliente existente en la base de datos
   Future<void> updateClient(Client client) async {
     try {
       if (client.id == null) {
         throw Exception('No se puede actualizar un cliente sin ID');
       }
-      
       await _supabase
           .from('clients')
           .update(client.toMap())
           .eq('id', client.id!);
-
     } catch (e) {
       print('Error en updateClient: $e');
       throw Exception('Error al actualizar cliente: $e');
     }
   }
 
-  /// Elimina un cliente de la base de datos usando su ID
   Future<void> deleteClient(String id) async {
     try {
       await _supabase.from('clients').delete().eq('id', id);
@@ -192,16 +183,12 @@ class SupabaseService {
     }
   }
 
-  // --- MÉTODOS CRUD PARA OPERADORES ---
-
-  /// Obtiene todos los operadores
   Future<List<Operator>> getOperators() async {
     try {
       final response = await _supabase
-          .from('operators') // Verifica que tu tabla se llame 'operators'
+          .from('operators')
           .select()
           .order('name', ascending: true);
-      
       return response.map((map) => Operator.fromMap(map)).toList();
     } catch (e) {
       print('Error en getOperators: $e');
@@ -209,10 +196,9 @@ class SupabaseService {
     }
   }
 
-  /// Crea un nuevo operador
   Future<void> createOperator(Operator operator) async {
     try {
-      final map = operator.toMap()..remove('id'); // Quitamos ID para que se autogenere
+      final map = operator.toMap()..remove('id');
       await _supabase.from('operators').insert(map);
     } catch (e) {
       print('Error en createOperator: $e');
@@ -220,7 +206,6 @@ class SupabaseService {
     }
   }
 
-  /// Actualiza un operador existente
   Future<void> updateOperator(Operator operator) async {
     try {
       if (operator.id == null) throw Exception('ID requerido');
@@ -234,7 +219,6 @@ class SupabaseService {
     }
   }
 
-  /// Elimina un operador
   Future<void> deleteOperator(String id) async {
     try {
       await _supabase.from('operators').delete().eq('id', id);
@@ -243,5 +227,4 @@ class SupabaseService {
       throw Exception('Error al eliminar operador: $e');
     }
   }
-
-} // <-- Fin de la clase SupabaseService
+}

@@ -3,7 +3,6 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  gtk
   printing
   url_launcher_linux
 )

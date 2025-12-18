@@ -7,6 +7,8 @@ class PdfGenerator {
   static Future<Uint8List> generatePdfBytes(ManifestData data) async {
     final pdf = pw.Document();
 
+    // Cargamos las fuentes
+    // Asegúrate de que estos assets existan en tu pubspec.yaml
     final font = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
     final boldFont = await rootBundle.load("assets/fonts/Roboto-Bold.ttf");
 
@@ -15,7 +17,7 @@ class PdfGenerator {
       bold: pw.Font.ttf(boldFont),
     );
 
-    final logoAsset = await rootBundle.load('images/logo.png');
+    final logoAsset = await rootBundle.load('assets/images/logo.png');
     final logoImage = pw.MemoryImage(logoAsset.buffer.asUint8List());
 
     pdf.addPage(
@@ -194,7 +196,6 @@ class PdfGenerator {
     );
   }
 
-  // ✅ TABLA DE CARGA CORREGIDA
   static pw.Widget _buildCargaTable(pw.Context context, List<CargaItem> carga) {
     final headerTextStyle = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
 
@@ -303,35 +304,40 @@ class PdfGenerator {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Recibí la carga descrita anteriormente a [] grados Fahrenheit y me comprometo a mantener la temperatura de la carga a los mismos grados...',
-          style: style,
-        ),
         pw.SizedBox(height: 8),
         pw.Text(
-          'Cualquier daño al producto en el trayecto a su destino corre por cuenta y riesgo de la Línea Transportista...',
+          'Cualquier daño al producto en el trayecto a su destino corre por cuenta y riesgo de la Línea Transportista. También indico mi conformidad de que el importe del flete se depositará a la cuenta indicada anteriormente una vez que sea entregada la carga completa y de conformidad.',
           style: style,
         ),
       ],
     );
   }
 
+  // --- MODIFICACIÓN DE FIRMAS Y HORA ---
   static pw.Widget _buildSignatureSection(pw.Context context, ManifestData data) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
-        _signatureBox(context, 'EMBARCO (NOMBRE Y FIRMA)', data.embarcoNombre, data.embarcoFirmaBytes),
-        _signatureBox(context, 'ALMACENISTA (NOMBRE Y FIRMA)', '', null),
+        // Firma Embarco
+        _signatureBox(context, 'EMBARCÓ (NOMBRE Y FIRMA)', data.embarcoNombre, data.embarcoFirmaBytes),
+        
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
+            // Firma Recibió
             _signatureBox(context, 'RECIBIÓ (NOMBRE Y FIRMA)', data.recibioNombre, data.recibioFirmaBytes),
+            
             pw.SizedBox(width: 10),
+            
+            // Sección HORA ajustada
             pw.Column(
               children: [
                 pw.Container(width: 80, height: 1, color: PdfColors.black),
+                pw.SizedBox(height: 2),
                 pw.Text('HORA:', style: const pw.TextStyle(fontSize: 8)),
+                // --- CAMBIO: Este espacio empuja "HORA" hacia arriba ---
+                pw.SizedBox(height: 25), 
               ],
             )
           ],
@@ -340,17 +346,27 @@ class PdfGenerator {
     );
   }
 
+  // --- MODIFICACIÓN: Box de firma centrado ---
   static pw.Widget _signatureBox(
       pw.Context context, String title, String name, Uint8List? signatureBytes) {
     return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.center, // Centrar contenido horizontalmente
       children: [
         if (signatureBytes != null && signatureBytes.isNotEmpty)
-          pw.Image(pw.MemoryImage(signatureBytes), height: 30, width: 120)
+          pw.Image(pw.MemoryImage(signatureBytes), height: 40, width: 100) // Ajusté tamaño para que se vea mejor
         else
-          pw.SizedBox(height: 30, width: 120),
-        pw.Container(width: 150, child: pw.Divider()),
-        pw.Text(name, style: const pw.TextStyle(fontSize: 8)),
-        pw.Text(title, style: const pw.TextStyle(fontSize: 8)),
+          pw.SizedBox(height: 40, width: 100),
+        
+        pw.Container(width: 150, child: pw.Divider()), // La línea divisoria
+        
+        pw.Text(name, 
+          style: const pw.TextStyle(fontSize: 8), 
+          textAlign: pw.TextAlign.center // Texto centrado
+        ),
+        pw.Text(title, 
+          style: const pw.TextStyle(fontSize: 8), 
+          textAlign: pw.TextAlign.center // Texto centrado
+        ),
       ],
     );
   }

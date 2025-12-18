@@ -77,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               // CORRECCIÓN FINAL: Se eliminó el 'assets/' inicial de la ruta.
               Image.asset(
-                'images/logo.png',
+                'assets/images/logo.png',
                 height: 100,
               ),
               const SizedBox(height: 32),

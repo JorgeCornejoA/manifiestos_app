@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:manifiestos_app/features/manifest/manifest_form_screen.dart';
 import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
-// MODIFICACIÓN: Se importa url_launcher
 import 'package:url_launcher/url_launcher.dart';
 
 class ManifestsListScreen extends StatefulWidget {
@@ -19,10 +18,16 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
   @override
   void initState() {
     super.initState();
-    _manifestsFuture = _supabaseService.getManifests();
+    _refreshManifests();
   }
 
-  // MODIFICACIÓN: Nueva función para abrir la URL del PDF
+  // Función para recargar la lista
+  void _refreshManifests() {
+    setState(() {
+      _manifestsFuture = _supabaseService.getManifests();
+    });
+  }
+
   Future<void> _launchPDF(String? pdfUrl) async {
     if (pdfUrl == null || pdfUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -30,14 +35,58 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
       );
       return;
     }
-    
-    final uri = Uri.parse(pdfUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo abrir el PDF: $pdfUrl')),
-      );
+
+    try {
+      final uri = Uri.parse(pdfUrl);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch $uri');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo abrir el PDF. Verifica tu conexión o instala un visor de PDF.')),
+        );
+      }
+    }
+  }
+
+  // --- NUEVO: Función para confirmar y eliminar ---
+  Future<void> _confirmDelete(ManifestData manifest) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar Manifiesto'),
+        content: Text('¿Estás seguro de que deseas eliminar el manifiesto del Trailer ${manifest.trailerNo}? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && manifest.id != null) {
+      try {
+        await _supabaseService.deleteManifest(manifest.id!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Manifiesto eliminado con éxito')),
+          );
+          _refreshManifests(); // Recargamos la lista
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
     }
   }
 
@@ -70,23 +119,17 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
               return ListTile(
                 title: Text('Manifiesto - Trailer No. ${manifest.trailerNo}'),
                 subtitle: Text('Fecha: ${manifest.fecha}'),
-                // MODIFICACIÓN: Se cambia el onTap por un botón de editar
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => ManifestFormScreen(manifest: manifest),
                     ),
-                  ).then((_) {
-                    // Actualiza la lista cuando regresa
-                    setState(() {
-                      _manifestsFuture = _supabaseService.getManifests();
-                    });
-                  });
+                  ).then((_) => _refreshManifests());
                 },
-                // MODIFICACIÓN: Se añade el icono de PDF
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Botón PDF
                     IconButton(
                       icon: Icon(
                         Icons.picture_as_pdf,
@@ -95,21 +138,25 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                       tooltip: 'Ver PDF',
                       onPressed: hasPdf ? () => _launchPDF(manifest.pdfUrl) : null,
                     ),
+                    
+                    // Botón Editar
                     IconButton(
                       icon: const Icon(Icons.edit, color: Colors.grey),
-                      tooltip: 'Editar Manifiesto',
+                      tooltip: 'Editar',
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (context) => ManifestFormScreen(manifest: manifest),
                           ),
-                        ).then((_) {
-                          // Actualiza la lista cuando regresa
-                          setState(() {
-                            _manifestsFuture = _supabaseService.getManifests();
-                          });
-                        });
+                        ).then((_) => _refreshManifests());
                       },
+                    ),
+
+                    // --- NUEVO: Botón Eliminar ---
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      tooltip: 'Eliminar',
+                      onPressed: () => _confirmDelete(manifest),
                     ),
                   ],
                 ),

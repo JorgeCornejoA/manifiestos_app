@@ -6,24 +6,32 @@ plugins {
 
 android {
     namespace = "com.example.manifiestos_app"
-    compileSdk = 34
-    ndkVersion = flutter.ndkVersion
+    // compileSdk = 34
+    compileSdkVersion 34  // <--- CAMBIAR A 34 (O el número fijo)
+    // ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "com.example.manifiestos_app"
-        minSdk = 23
-        targetSdk = 34
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        minSdkVersion 23      // <--- CAMBIAR A 21 O 23 (Recomendado para Supabase)
+        // minSdk = 23
+        // targetSdk = 34
+        targetSdkVersion 34   // <--- CAMBIAR A 34
+        // versionCode = flutter.versionCode
+        // versionCode flutterVersionCode.toInteger()
+        versionCode 1
+        // versionName flutterVersionName
+        versionName "1.0.0"
+        // versionName = flutter.versionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {

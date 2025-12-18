@@ -35,6 +35,7 @@ dependencies:
   
   # MODIFICACIÓN: Se añade url_launcher para abrir el PDF
   url_launcher: ^6.0.0
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +46,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/ # Ruta específica para las imágenes
+    - assets/images/logo.png
     - assets/fonts/
     - .env # Archivo para variables de entorno
 
@@ -59,3 +61,7 @@ flutter:
         - asset: assets/fonts/Roboto-BoldItalic.ttf
           weight: 700
           style: italic
+
+
+dependency_overrides:
+  app_links: 3.4.5
