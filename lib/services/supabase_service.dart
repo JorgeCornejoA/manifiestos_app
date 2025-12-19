@@ -72,14 +72,23 @@ class SupabaseService {
     }
   }
 
+  // En supabase_service.dart
+
   Future<List<ManifestData>> getManifests() async {
     try {
-      final response = await _supabase.from('manifests').select();
+      // MODIFICACIÓN: Agregamos .order para ordenar del más nuevo al más viejo
+      final response = await _supabase
+          .from('manifests')
+          .select()
+          .order('created_at', ascending: false); 
+          
       final manifests = (response as List<dynamic>)
           .map((data) => ManifestData.fromMap(data as Map<String, dynamic>))
           .toList();
       return manifests;
     } catch (e) {
+      // ignore: avoid_print
+      print('Error en getManifests: $e');
       return [];
     }
   }

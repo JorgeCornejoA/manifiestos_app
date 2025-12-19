@@ -13,18 +13,80 @@ class ManifestsListScreen extends StatefulWidget {
 
 class _ManifestsListScreenState extends State<ManifestsListScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  late Future<List<ManifestData>> _manifestsFuture;
+  
+  // Listas para manejar el buscador
+  List<ManifestData> _allManifests = [];
+  List<ManifestData> _foundManifests = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _refreshManifests();
+    _fetchManifests();
   }
 
-  // Función para recargar la lista
-  void _refreshManifests() {
+  // --- NUEVO: Función auxiliar para convertir tu fecha (DD-MMM-YYYY) a DateTime real ---
+  DateTime _parseDate(String dateStr) {
+    try {
+      // Formato esperado: "12-DIC-2024"
+      final parts = dateStr.split('-');
+      if (parts.length != 3) return DateTime(1900); // Si está mal formada, la manda al final
+
+      final day = int.parse(parts[0]);
+      final monthStr = parts[1].toUpperCase();
+      final year = int.parse(parts[2]);
+
+      const months = {
+        'ENE': 1, 'FEB': 2, 'MAR': 3, 'ABR': 4, 'MAY': 5, 'JUN': 6,
+        'JUL': 7, 'AGO': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DIC': 12
+      };
+
+      final month = months[monthStr] ?? 1;
+      return DateTime(year, month, day);
+    } catch (e) {
+      return DateTime(1900);
+    }
+  }
+
+  // Función para obtener datos y ordenarlos
+  Future<void> _fetchManifests() async {
+    setState(() => _isLoading = true);
+    // Obtenemos los datos (no importa el orden en que vengan de la BD)
+    List<ManifestData> results = await _supabaseService.getManifests();
+    
+    // --- NUEVO: Ordenamiento manual por la fecha escrita ---
+    results.sort((a, b) {
+      final dateA = _parseDate(a.fecha);
+      final dateB = _parseDate(b.fecha);
+      // b.compareTo(a) ordena de MAYOR a MENOR (Más reciente primero)
+      return dateB.compareTo(dateA); 
+    });
+
+    if (mounted) {
+      setState(() {
+        _allManifests = results;
+        _foundManifests = results; 
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Función de filtrado (Buscador)
+  void _runFilter(String enteredKeyword) {
+    List<ManifestData> results = [];
+    if (enteredKeyword.isEmpty) {
+      results = _allManifests;
+    } else {
+      results = _allManifests
+          .where((manifest) =>
+              manifest.trailerNo.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
+              manifest.productor.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
+              manifest.consignadoA.toLowerCase().contains(enteredKeyword.toLowerCase()))
+          .toList();
+    }
+
     setState(() {
-      _manifestsFuture = _supabaseService.getManifests();
+      _foundManifests = results;
     });
   }
 
@@ -44,19 +106,18 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo abrir el PDF. Verifica tu conexión o instala un visor de PDF.')),
+          const SnackBar(content: Text('No se pudo abrir el PDF. Verifica tu conexión.')),
         );
       }
     }
   }
 
-  // --- NUEVO: Función para confirmar y eliminar ---
   Future<void> _confirmDelete(ManifestData manifest) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar Manifiesto'),
-        content: Text('¿Estás seguro de que deseas eliminar el manifiesto del Trailer ${manifest.trailerNo}? Esta acción no se puede deshacer.'),
+        content: Text('¿Estás seguro de eliminar el manifiesto del Trailer ${manifest.trailerNo}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -72,20 +133,12 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
     );
 
     if (confirmed == true && manifest.id != null) {
-      try {
-        await _supabaseService.deleteManifest(manifest.id!);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Manifiesto eliminado con éxito')),
-          );
-          _refreshManifests(); // Recargamos la lista
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red),
-          );
-        }
+      await _supabaseService.deleteManifest(manifest.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Manifiesto eliminado')),
+        );
+        _fetchManifests(); // Recargamos la lista
       }
     }
   }
@@ -96,74 +149,76 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
       appBar: AppBar(
         title: const Text('Manifiestos Guardados'),
       ),
-      body: FutureBuilder<List<ManifestData>>(
-        future: _manifestsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No hay manifiestos guardados.'));
-          }
+      body: Column(
+        children: [
+          // --- BARRA DE BÚSQUEDA ---
+          Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: TextField(
+              onChanged: (value) => _runFilter(value),
+              decoration: const InputDecoration(
+                labelText: 'Buscar manifiesto',
+                suffixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+              ),
+            ),
+          ),
+          
+          // --- LISTA DE RESULTADOS ---
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _foundManifests.isEmpty
+                    ? const Center(child: Text('No se encontraron resultados'))
+                    : ListView.builder(
+                        itemCount: _foundManifests.length,
+                        itemBuilder: (context, index) {
+                          final manifest = _foundManifests[index];
+                          final hasPdf = manifest.pdfUrl != null && manifest.pdfUrl!.isNotEmpty;
 
-          final manifests = snapshot.data!;
-          return ListView.builder(
-            itemCount: manifests.length,
-            itemBuilder: (context, index) {
-              final manifest = manifests[index];
-              final hasPdf = manifest.pdfUrl != null && manifest.pdfUrl!.isNotEmpty;
-              
-              return ListTile(
-                title: Text('Manifiesto - Trailer No. ${manifest.trailerNo}'),
-                subtitle: Text('Fecha: ${manifest.fecha}'),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => ManifestFormScreen(manifest: manifest),
-                    ),
-                  ).then((_) => _refreshManifests());
-                },
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Botón PDF
-                    IconButton(
-                      icon: Icon(
-                        Icons.picture_as_pdf,
-                        color: hasPdf ? Colors.blue : Colors.grey,
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue.shade100,
+                                child: Text(
+                                  manifest.trailerNo.isNotEmpty ? manifest.trailerNo.substring(0, 1) : '#',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Text('Trailer: ${manifest.trailerNo}'),
+                              subtitle: Text('${manifest.fecha}\n${manifest.consignadoA}'),
+                              isThreeLine: true,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(Icons.picture_as_pdf, color: hasPdf ? Colors.blue : Colors.grey),
+                                    onPressed: hasPdf ? () => _launchPDF(manifest.pdfUrl) : null,
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.orange),
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (context) => ManifestFormScreen(manifest: manifest),
+                                        ),
+                                      ).then((_) => _fetchManifests());
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    onPressed: () => _confirmDelete(manifest),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                      tooltip: 'Ver PDF',
-                      onPressed: hasPdf ? () => _launchPDF(manifest.pdfUrl) : null,
-                    ),
-                    
-                    // Botón Editar
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.grey),
-                      tooltip: 'Editar',
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => ManifestFormScreen(manifest: manifest),
-                          ),
-                        ).then((_) => _refreshManifests());
-                      },
-                    ),
-
-                    // --- NUEVO: Botón Eliminar ---
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      tooltip: 'Eliminar',
-                      onPressed: () => _confirmDelete(manifest),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+          ),
+        ],
       ),
     );
   }
