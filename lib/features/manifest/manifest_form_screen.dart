@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:typed_data'; // <--- ESTE FALTABA, ES NECESARIO PARA Uint8List
-import 'package:http/http.dart' as http; // Asegúrate de haber hecho: flutter pub add http
+import 'dart:typed_data'; 
+import 'package:http/http.dart' as http; 
+import 'package:image_picker/image_picker.dart'; // <--- IMPORTANTE: Nueva dependencia
 import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:manifiestos_app/utils/pdf_generator.dart';
@@ -8,11 +9,10 @@ import 'package:printing/printing.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
 
-// Imports de modelos
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 
-// Helper class to manage controllers and focus nodes for each CargaItem
+// --- Helper class (Sin cambios) ---
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController producto;
@@ -66,19 +66,23 @@ class ManifestFormScreen extends StatefulWidget {
 
 class _ManifestFormScreenState extends State<ManifestFormScreen> {
   int _currentStep = 0;
+  // --- CAMBIO: Aumentamos el total de pasos a 7 para incluir Evidencia ---
+  final int _totalSteps = 7; 
+  
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = false;
   bool _canPop = false;
 
-  // Variables para recordar la selección actual
   Client? _selectedClient;
   Operator? _selectedOperator;
 
-  // Variables para almacenar las URLs de firmas existentes
   String? _embarcoFirmaUrl;
   String? _recibioFirmaUrl;
 
-  // Keys para validar cada paso
+  // --- NUEVO: Variables para Fotos de Evidencia ---
+  List<Uint8List> _evidencePhotos = [];
+  final ImagePicker _picker = ImagePicker();
+
   final _formKeyStep0 = GlobalKey<FormState>();
   final _formKeyStep1 = GlobalKey<FormState>();
   final _formKeyStep2 = GlobalKey<FormState>();
@@ -116,7 +120,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final SignatureController _recibioSignatureController =
       SignatureController(penStrokeWidth: 2, penColor: Colors.black);
 
-  final int _totalSteps = 6;
   int _totalPallets = 0;
   int _totalCajas = 0;
 
@@ -136,8 +139,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Funciones Auxiliares ---
-
+  // --- Helpers de Fecha ---
   String _formatDate(DateTime date) {
     try {
       return DateFormat('dd-MMM-yyyy', 'es_ES').format(date).toUpperCase();
@@ -164,6 +166,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
+  // --- Lógica Carga ---
   void _addCargaItem() {
     final newControllers = _CargaItemControllers(CargaItem());
     newControllers.pallets.addListener(_calculateTotals);
@@ -203,7 +206,33 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  void _loadManifestData(ManifestData manifest) {
+  // --- NUEVO: Funciones para Fotos ---
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        imageQuality: 70, // Compresión para optimizar PDF
+        maxWidth: 1200,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _evidencePhotos.add(bytes);
+        });
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error al seleccionar imagen: $e');
+    }
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _evidencePhotos.removeAt(index);
+    });
+  }
+
+  // --- Carga de Datos ---
+  void _loadManifestData(ManifestData manifest) async { // Hacemos async para descargar fotos
     _trailerNoController.text = manifest.trailerNo;
     _productorController.text = manifest.productor;
     _certificadoOrigenController.text = manifest.certificadoOrigen;
@@ -228,33 +257,48 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _embarcoNombreController.text = manifest.embarcoNombre;
     _recibioNombreController.text = manifest.recibioNombre;
 
-    // Cargar las URLs de las firmas
     _embarcoFirmaUrl = manifest.embarcoFirmaUrl;
     _recibioFirmaUrl = manifest.recibioFirmaUrl;
 
-    setState(() {
-      for (final controller in _cargaItemControllers) {
-        controller.dispose();
+    // --- NUEVO: Descargar Fotos de Evidencia Existentes ---
+    if (manifest.evidencePhotosUrls != null) {
+      List<Uint8List> loadedPhotos = [];
+      for (String url in manifest.evidencePhotosUrls!) {
+        final bytes = await _downloadBytesFromUrl(url);
+        if (bytes != null) loadedPhotos.add(bytes);
       }
-      _cargaItemControllers = manifest.carga.map((item) {
-        final newControllers = _CargaItemControllers(item);
-        newControllers.pallets.addListener(_calculateTotals);
-        newControllers.cajasPorPallet.addListener(_calculateTotals);
-        return newControllers;
-      }).toList();
-
-      if (_cargaItemControllers.isEmpty) {
-        _addCargaItem();
+      if (mounted) {
+        setState(() {
+          _evidencePhotos = loadedPhotos;
+        });
       }
+    }
 
-      for (final entry in manifest.trailerLayout.entries) {
-        final index = int.tryParse(entry.key);
-        if (index != null && _trailerLayoutControllers.containsKey(index)) {
-          _trailerLayoutControllers[index]!.text = entry.value;
+    if (mounted) {
+      setState(() {
+        for (final controller in _cargaItemControllers) {
+          controller.dispose();
         }
-      }
-      _calculateTotals();
-    });
+        _cargaItemControllers = manifest.carga.map((item) {
+          final newControllers = _CargaItemControllers(item);
+          newControllers.pallets.addListener(_calculateTotals);
+          newControllers.cajasPorPallet.addListener(_calculateTotals);
+          return newControllers;
+        }).toList();
+
+        if (_cargaItemControllers.isEmpty) {
+          _addCargaItem();
+        }
+
+        for (final entry in manifest.trailerLayout.entries) {
+          final index = int.tryParse(entry.key);
+          if (index != null && _trailerLayoutControllers.containsKey(index)) {
+            _trailerLayoutControllers[index]!.text = entry.value;
+          }
+        }
+        _calculateTotals();
+      });
+    }
   }
 
   @override
@@ -291,6 +335,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     super.dispose();
   }
 
+  // --- Buscadores ---
   Future<Iterable<Client>> _searchClients(String query) async {
     if (query.isEmpty) return const Iterable.empty();
     try {
@@ -342,24 +387,26 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     ) ?? false;
   }
 
+  // --- Validaciones ---
   bool _validateAllSteps() {
+    // 1. Info General
     if (_trailerNoController.text.isEmpty ||
         _productorController.text.isEmpty ||
         _fechaController.text.isEmpty) {
       _showErrorSnackbar('Error en "Info General": Faltan campos obligatorios.');
       return false;
     }
-
+    // 2. Destino
     if (_consignadoAController.text.isEmpty) {
       _showErrorSnackbar('Error en "Destino": Falta "Consignado A".');
       return false;
     }
-
+    // 3. Transportista
     if (_operadorController.text.isEmpty) {
       _showErrorSnackbar('Error en "Transportista": Falta "Operador".');
       return false;
     }
-
+    // 4. Carga
     if (_cargaItemControllers.isEmpty) {
       _showErrorSnackbar('Error en "Carga": Debe añadir al menos un producto.');
       return false;
@@ -373,13 +420,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         return false;
       }
     }
-
+    // 5. Firmas
     if (_embarcoNombreController.text.isEmpty ||
         _recibioNombreController.text.isEmpty) {
        _showErrorSnackbar('Error en "Firmas": Faltan los nombres.');
        return false;
     }
-
     bool embarcoValid = _embarcoSignatureController.isNotEmpty || (_embarcoFirmaUrl != null && _embarcoFirmaUrl!.isNotEmpty);
     bool recibioValid = _recibioSignatureController.isNotEmpty || (_recibioFirmaUrl != null && _recibioFirmaUrl!.isNotEmpty);
 
@@ -387,13 +433,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _showErrorSnackbar('Error en "Firmas": Faltan las firmas gráficas.');
       return false;
     }
-
+    // 6. Diagrama
     bool isDiagramValid = _trailerLayoutControllers.values.any((c) => c.text.isNotEmpty);
     if (!isDiagramValid) {
       _showErrorSnackbar('Error en "Diagrama": Indique al menos una posición.');
       return false;
     }
-
+    
+    // 7. Evidencia (Opcional, así que siempre retorna true por ahora)
+    
     return true;
   }
 
@@ -414,6 +462,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         if (!isValidCurrent) _showErrorSnackbar('Añada carga antes de continuar.');
       }
       else if (_currentStep == 4) isValidCurrent = _formKeyStep4.currentState!.validate();
+      else if (_currentStep == 5) isValidCurrent = true; // Diagrama validado en final, permitimos avanzar
+      else if (_currentStep == 6) isValidCurrent = true; // Evidencia es opcional
       
       if (isValidCurrent) {
         setState(() => _currentStep += 1);
@@ -427,7 +477,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- FUNCIÓN MEJORADA: Descargar bytes usando HTTP ---
+  // --- Descarga Bytes ---
   Future<Uint8List?> _downloadBytesFromUrl(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -436,16 +486,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       if (response.statusCode == 200) {
         return response.bodyBytes; 
       } else {
-        debugPrint('Error descarga firma: ${response.statusCode}');
+        debugPrint('Error descarga: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      debugPrint('Excepción al descargar firma: $e');
+      debugPrint('Excepción al descargar: $e');
       return null;
     }
   }
 
-  // --- LÓGICA DE GUARDADO INTELIGENTE ---
+  // --- GUARDAR Y GENERAR PDF ---
   Future<void> _generateAndSavePdf() async {
     setState(() => _isLoading = true);
     try {
@@ -490,7 +540,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         );
       }).toList();
 
-      // OBJETO PARA LA BASE DE DATOS
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
         trailerNo: _trailerNoController.text,
@@ -523,12 +572,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         recibioFirmaBytes: bdRecibioBytes,
         embarcoFirmaUrl: _embarcoFirmaUrl,
         recibioFirmaUrl: _recibioFirmaUrl,
+        
+        // --- NUEVO: Fotos para BD ---
+        evidencePhotosBytes: _evidencePhotos, // Enviamos los bytes (viejos + nuevos) para que el servicio los gestione
+        evidencePhotosUrls: widget.manifest?.evidencePhotosUrls, // Pasamos referencia de urls viejas
       );
 
       final manifestId = await _supabaseService.saveManifest(dataForBd);
       if (manifestId == null) throw Exception("Error al guardar en BD.");
 
-      // OBJETO PARA EL PDF (Con los bytes descargados)
       final dataForPdf = ManifestData(
         id: manifestId,
         trailerNo: dataForBd.trailerNo,
@@ -559,6 +611,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         
         embarcoFirmaBytes: pdfEmbarcoBytes,
         recibioFirmaBytes: pdfRecibioBytes,
+        
+        // --- NUEVO: Fotos para PDF ---
+        evidencePhotosBytes: _evidencePhotos, // Pasamos la lista completa de bytes
       );
 
       final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf);
@@ -860,6 +915,63 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               title: const Text('Diagrama'),
               content: _buildTrailerDiagram(),
               isActive: _currentStep >= 5,
+            ),
+            // --- NUEVO: Paso Evidencia ---
+            Step(
+              title: const Text('Evidencia'),
+              content: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Cámara'),
+                        onPressed: () => _pickImage(ImageSource.camera),
+                      ),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Galería'),
+                        onPressed: () => _pickImage(ImageSource.gallery),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (_evidencePhotos.isNotEmpty)
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 4,
+                        mainAxisSpacing: 4,
+                      ),
+                      itemCount: _evidencePhotos.length,
+                      itemBuilder: (context, index) {
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.memory(_evidencePhotos[index], fit: BoxFit.cover),
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () => _removePhoto(index),
+                                child: Container(
+                                  color: Colors.red,
+                                  child: const Icon(Icons.close, color: Colors.white, size: 20),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    )
+                  else
+                    const Text('No hay fotos adjuntas.', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+              isActive: _currentStep >= 6, 
             ),
           ],
         ),

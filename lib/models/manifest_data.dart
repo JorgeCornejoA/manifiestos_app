@@ -30,12 +30,17 @@ class ManifestData {
   final String? embarcoFirmaUrl;
   final String? recibioFirmaUrl;
 
+
   // MODIFICACIÓN: Se añade el campo para la URL del PDF
   final String? pdfUrl;
 
   // Transient fields for images
   final Uint8List? embarcoFirmaBytes;
   final Uint8List? recibioFirmaBytes;
+
+  // --- NUEVOS CAMPOS ---
+  final List<String>? evidencePhotosUrls; // URLs guardadas
+  final List<Uint8List>? evidencePhotosBytes; // Fotos nuevas o descargadas para PDF
 
   ManifestData({
     this.id,
@@ -69,6 +74,8 @@ class ManifestData {
     this.pdfUrl, // Se añade al constructor
     this.embarcoFirmaBytes,
     this.recibioFirmaBytes,
+    this.evidencePhotosUrls,
+    this.evidencePhotosBytes,
   });
 
   factory ManifestData.fromMap(Map<String, dynamic> map) {
@@ -111,6 +118,9 @@ class ManifestData {
       embarcoFirmaUrl: map['embarco_firma_url'],
       recibioFirmaUrl: map['recibio_firma_url'],
       pdfUrl: map['pdf_url'], // Se lee desde el mapa
+      evidencePhotosUrls: map['evidence_photos_urls'] != null 
+          ? List<String>.from(map['evidence_photos_urls']) 
+          : [],
     );
   }
 
@@ -145,6 +155,7 @@ class ManifestData {
       'embarco_firma_url': embarcoFirmaUrl,
       'recibio_firma_url': recibioFirmaUrl,
       'pdf_url': pdfUrl, // Se añade al mapa
+      'evidence_photos_urls': evidencePhotosUrls,
     };
   }
 }

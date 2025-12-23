@@ -36,6 +36,7 @@ dependencies:
   # MODIFICACIÓN: Se añade url_launcher para abrir el PDF
   url_launcher: ^6.0.0
   http: ^1.6.0
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

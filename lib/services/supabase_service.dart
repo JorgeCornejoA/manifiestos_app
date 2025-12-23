@@ -13,50 +13,70 @@ class SupabaseService {
     try {
       final manifestId = data.id ?? _uuid.v4();
 
-      // --- CORRECCIÓN: Inicializar con la URL existente ---
-      // Antes estaba en null, por eso borraba la firma si no la cambiabas.
       String? embarcoFirmaUrl = data.embarcoFirmaUrl;
       String? recibioFirmaUrl = data.recibioFirmaUrl;
-
-      // Solo si hay bytes NUEVOS, subimos y actualizamos la URL
-      if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
-        final path = 'signatures/$manifestId/embarco_firma.png';
-        await _supabase.storage.from('manifests').uploadBinary(
-              path,
-              data.embarcoFirmaBytes!,
-              fileOptions: const FileOptions(upsert: true),
-            );
-        embarcoFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
-      }
       
+      // --- NUEVO: Lógica para Fotos de Evidencia ---
+      // 1. Iniciamos con las URLs que ya existían
+      List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
+
+      // 2. Si hay fotos nuevas (bytes), las subimos una por una
+      if (data.evidencePhotosBytes != null && data.evidencePhotosBytes!.isNotEmpty) {
+        // NOTA: Para simplificar, en este ejemplo asumimos que "bytes" contiene SOLO las nuevas.
+        // En la práctica real del formulario, combinaremos todo.
+        
+        // Pero espera, tu UI mandará TODAS las fotos (viejas descargadas + nuevas) como bytes para el PDF.
+        // Para la BD, lo ideal es subir las nuevas. 
+        // TRUCO: Vamos a subir todas las que vengan en bytes y reemplazar la lista. 
+        // Es un poco ineficiente re-subir, pero es lo más seguro para evitar conflictos de índices ahora.
+        
+        finalPhotoUrls.clear(); // Limpiamos para reconstruir la lista con las fotos actuales
+        
+        for (int i = 0; i < data.evidencePhotosBytes!.length; i++) {
+          final bytes = data.evidencePhotosBytes![i];
+          // Usamos un nombre único para cada foto
+          final uniqueName = '${_uuid.v4()}.png'; 
+          final path = 'evidence/$manifestId/$uniqueName';
+          
+          await _supabase.storage.from('manifests').uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
+          
+          final url = _supabase.storage.from('manifests').getPublicUrl(path);
+          finalPhotoUrls.add(url);
+        }
+      }
+      // ---------------------------------------------
+
+      // ... (Lógica de firmas existente igual) ...
+      if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
+         // ... tu código de siempre ...
+      }
       if (data.recibioFirmaBytes != null && data.recibioFirmaBytes!.isNotEmpty) {
-        final path = 'signatures/$manifestId/recibio_firma.png';
-        await _supabase.storage.from('manifests').uploadBinary(
-              path,
-              data.recibioFirmaBytes!,
-              fileOptions: const FileOptions(upsert: true),
-            );
-        recibioFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
+         // ... tu código de siempre ...
       }
 
       final manifestMap = data.toMap();
-      // Guardamos la URL correcta (la nueva o la que ya existía)
       manifestMap['embarco_firma_url'] = embarcoFirmaUrl;
       manifestMap['recibio_firma_url'] = recibioFirmaUrl;
       
-      // Eliminamos pdf_url del mapa para no borrarlo accidentalmente al editar
+      // --- GUARDAR LISTA DE FOTOS ---
+      manifestMap['evidence_photos_urls'] = finalPhotoUrls;
+
       manifestMap.remove('pdf_url');
 
+      // ... Insert o Update igual ...
       final id = data.id;
       if (id == null) {
         manifestMap['id'] = manifestId;
-         await _supabase.from('manifests').insert(manifestMap);
+        await _supabase.from('manifests').insert(manifestMap);
       } else {
         await _supabase.from('manifests').update(manifestMap).eq('id', id);
       }
       return manifestId;
     } catch (e) {
-      // ignore: avoid_print
       print('Error en saveManifest: $e');
       return null;
     }

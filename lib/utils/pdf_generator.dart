@@ -62,6 +62,29 @@ class PdfGenerator {
         },
       ),
     );
+
+    // --- NUEVO: PÁGINAS DE FOTOS ---
+    if (data.evidencePhotosBytes != null) {
+      for (var photoBytes in data.evidencePhotosBytes!) {
+        final image = pw.MemoryImage(photoBytes);
+        
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.letter,
+            margin: const pw.EdgeInsets.all(24),
+            build: (context) {
+              return pw.Center(
+                child: pw.Image(
+                  image,
+                  fit: pw.BoxFit.contain, // Ajusta la foto a la página sin recortar
+                ),
+              );
+            },
+          ),
+        );
+      }
+    }
+    
     return pdf.save();
   }
 
