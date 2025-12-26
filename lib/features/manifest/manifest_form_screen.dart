@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data'; 
 import 'package:http/http.dart' as http; 
-import 'package:image_picker/image_picker.dart'; // <--- IMPORTANTE: Nueva dependencia
+import 'package:image_picker/image_picker.dart';
 import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:manifiestos_app/utils/pdf_generator.dart';
@@ -12,7 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 
-// --- Helper class (Sin cambios) ---
+// Helper class (Sin cambios)
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController producto;
@@ -66,7 +66,6 @@ class ManifestFormScreen extends StatefulWidget {
 
 class _ManifestFormScreenState extends State<ManifestFormScreen> {
   int _currentStep = 0;
-  // --- CAMBIO: Aumentamos el total de pasos a 7 para incluir Evidencia ---
   final int _totalSteps = 7; 
   
   final SupabaseService _supabaseService = SupabaseService();
@@ -79,7 +78,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   String? _embarcoFirmaUrl;
   String? _recibioFirmaUrl;
 
-  // --- NUEVO: Variables para Fotos de Evidencia ---
   List<Uint8List> _evidencePhotos = [];
   final ImagePicker _picker = ImagePicker();
 
@@ -206,12 +204,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- NUEVO: Funciones para Fotos ---
+  // --- Funciones para Fotos ---
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
-        imageQuality: 70, // Compresión para optimizar PDF
+        imageQuality: 70, 
         maxWidth: 1200,
       );
       if (image != null) {
@@ -232,7 +230,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
 
   // --- Carga de Datos ---
-  void _loadManifestData(ManifestData manifest) async { // Hacemos async para descargar fotos
+  void _loadManifestData(ManifestData manifest) async { 
     _trailerNoController.text = manifest.trailerNo;
     _productorController.text = manifest.productor;
     _certificadoOrigenController.text = manifest.certificadoOrigen;
@@ -260,7 +258,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _embarcoFirmaUrl = manifest.embarcoFirmaUrl;
     _recibioFirmaUrl = manifest.recibioFirmaUrl;
 
-    // --- NUEVO: Descargar Fotos de Evidencia Existentes ---
     if (manifest.evidencePhotosUrls != null) {
       List<Uint8List> loadedPhotos = [];
       for (String url in manifest.evidencePhotosUrls!) {
@@ -389,24 +386,20 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   // --- Validaciones ---
   bool _validateAllSteps() {
-    // 1. Info General
     if (_trailerNoController.text.isEmpty ||
         _productorController.text.isEmpty ||
         _fechaController.text.isEmpty) {
       _showErrorSnackbar('Error en "Info General": Faltan campos obligatorios.');
       return false;
     }
-    // 2. Destino
     if (_consignadoAController.text.isEmpty) {
       _showErrorSnackbar('Error en "Destino": Falta "Consignado A".');
       return false;
     }
-    // 3. Transportista
     if (_operadorController.text.isEmpty) {
       _showErrorSnackbar('Error en "Transportista": Falta "Operador".');
       return false;
     }
-    // 4. Carga
     if (_cargaItemControllers.isEmpty) {
       _showErrorSnackbar('Error en "Carga": Debe añadir al menos un producto.');
       return false;
@@ -420,7 +413,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         return false;
       }
     }
-    // 5. Firmas
     if (_embarcoNombreController.text.isEmpty ||
         _recibioNombreController.text.isEmpty) {
        _showErrorSnackbar('Error en "Firmas": Faltan los nombres.');
@@ -433,15 +425,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _showErrorSnackbar('Error en "Firmas": Faltan las firmas gráficas.');
       return false;
     }
-    // 6. Diagrama
     bool isDiagramValid = _trailerLayoutControllers.values.any((c) => c.text.isNotEmpty);
     if (!isDiagramValid) {
       _showErrorSnackbar('Error en "Diagrama": Indique al menos una posición.');
       return false;
     }
-    
-    // 7. Evidencia (Opcional, así que siempre retorna true por ahora)
-    
     return true;
   }
 
@@ -462,8 +450,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         if (!isValidCurrent) _showErrorSnackbar('Añada carga antes de continuar.');
       }
       else if (_currentStep == 4) isValidCurrent = _formKeyStep4.currentState!.validate();
-      else if (_currentStep == 5) isValidCurrent = true; // Diagrama validado en final, permitimos avanzar
-      else if (_currentStep == 6) isValidCurrent = true; // Evidencia es opcional
+      else if (_currentStep == 5) isValidCurrent = true; 
+      else if (_currentStep == 6) isValidCurrent = true; 
       
       if (isValidCurrent) {
         setState(() => _currentStep += 1);
@@ -573,9 +561,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         embarcoFirmaUrl: _embarcoFirmaUrl,
         recibioFirmaUrl: _recibioFirmaUrl,
         
-        // --- NUEVO: Fotos para BD ---
-        evidencePhotosBytes: _evidencePhotos, // Enviamos los bytes (viejos + nuevos) para que el servicio los gestione
-        evidencePhotosUrls: widget.manifest?.evidencePhotosUrls, // Pasamos referencia de urls viejas
+        evidencePhotosBytes: _evidencePhotos, 
+        evidencePhotosUrls: widget.manifest?.evidencePhotosUrls, 
       );
 
       final manifestId = await _supabaseService.saveManifest(dataForBd);
@@ -612,8 +599,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         embarcoFirmaBytes: pdfEmbarcoBytes,
         recibioFirmaBytes: pdfRecibioBytes,
         
-        // --- NUEVO: Fotos para PDF ---
-        evidencePhotosBytes: _evidencePhotos, // Pasamos la lista completa de bytes
+        evidencePhotosBytes: _evidencePhotos,
       );
 
       final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf);
@@ -656,9 +642,23 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-            title: Text(widget.manifest == null
-                ? 'Nuevo Manifiesto'
-                : 'Detalles del Manifiesto')),
+          title: Text(widget.manifest == null
+              ? 'Nuevo Manifiesto'
+              : 'Detalles del Manifiesto'),
+          actions: [
+            // --- NUEVO: Botón de Guardar en la barra superior ---
+            if (!_isLoading)
+              IconButton(
+                icon: const Icon(Icons.save),
+                tooltip: 'Guardar Manifiesto',
+                onPressed: () {
+                  if (_validateAllSteps()) {
+                    _generateAndSavePdf();
+                  }
+                },
+              ),
+          ],
+        ),
         body: Stepper(
           type: StepperType.vertical,
           physics: const ClampingScrollPhysics(),
@@ -916,7 +916,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               content: _buildTrailerDiagram(),
               isActive: _currentStep >= 5,
             ),
-            // --- NUEVO: Paso Evidencia ---
             Step(
               title: const Text('Evidencia'),
               content: Column(
