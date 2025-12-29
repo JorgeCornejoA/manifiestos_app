@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- 1. IMPORTANTE: Agrega esta librería
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:manifiestos_app/features/clients/clients_screen.dart';
 import 'package:manifiestos_app/features/manifest/manifest_form_screen.dart';
 import 'package:manifiestos_app/features/manifest/manifests_list_screen.dart';
@@ -9,13 +11,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/features/operators/operators_screen.dart';
 import 'package:manifiestos_app/features/operators/operator_form_screen.dart';
 import 'package:manifiestos_app/models/operator.dart';
-
-// Estos imports ya los tenías, ¡perfecto!
 import 'package:manifiestos_app/features/clients/client_form_screen.dart';
 import 'package:manifiestos_app/models/client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // --- 2. CÓDIGO PARA BLOQUEAR LA ROTACIÓN ---
+  // Esto obliga a la app a mantenerse siempre en vertical
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+  // -------------------------------------------
 
   const supabaseUrl = 'https://mnpffwxnrydzahnfivgv.supabase.co';
   const supabaseAnonKey =
@@ -34,14 +41,83 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const primaryGreen = Color(0xFF2E7D32);
+    const secondaryGreen = Color(0xFF43A047);
+    const lightGreen = Color(0xFFE8F5E9);
+
     return MaterialApp(
       title: 'Manifiestos App',
+      debugShowCheckedModeBanner: false,
+      
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
+        
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: primaryGreen,
+          primary: primaryGreen,
+          secondary: secondaryGreen,
+          surface: Colors.white,
+          background: Colors.white,
+        ),
+
+        scaffoldBackgroundColor: Colors.white,
+
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: primaryGreen,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            color: primaryGreen,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+          iconTheme: IconThemeData(color: primaryGreen),
+        ),
+
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryGreen,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: primaryGreen,
+          foregroundColor: Colors.white,
+        ),
+
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: lightGreen.withOpacity(0.5),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: primaryGreen, width: 2),
+          ),
+          labelStyle: TextStyle(color: Colors.grey[700]),
+          prefixIconColor: primaryGreen,
+          suffixIconColor: primaryGreen,
+        ),
       ),
+
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es', 'ES'),
+      ],
+
       initialRoute: '/',
-      // --- MODIFICADO: Se añade la nueva ruta /client-form ---
       routes: {
         '/': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
@@ -49,11 +125,7 @@ class MyApp extends StatelessWidget {
         '/manifest-form': (context) => const ManifestFormScreen(),
         '/clients': (context) => const ClientsScreen(),
         
-        // --- AÑADIDO: Esta es la nueva ruta para el formulario ---
-        // Permite crear y editar clientes
         '/client-form': (context) {
-          // Esto toma el cliente que pasamos como argumento
-          // al navegar (para poder editarlo)
           final client = ModalRoute.of(context)!.settings.arguments as Client?;
           return ClientFormScreen(client: client);
         },

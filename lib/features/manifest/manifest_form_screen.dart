@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
+import 'package:manifiestos_app/models/employee.dart'; 
 
 // Helper class (Sin cambios)
 class _CargaItemControllers {
@@ -86,7 +87,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _formKeyStep2 = GlobalKey<FormState>();
   final _formKeyStep4 = GlobalKey<FormState>();
 
-  // Controllers
   final _trailerNoController = TextEditingController();
   final _productorController = TextEditingController();
   final _certificadoOrigenController = TextEditingController();
@@ -111,7 +111,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _embarcoNombreController = TextEditingController();
   final _recibioNombreController = TextEditingController();
 
-  List<_CargaItemControllers> _cargaItemControllers = [];
+  List<List<_CargaItemControllers>> _cargaSectionsControllers = [];
+  
   late Map<int, TextEditingController> _trailerLayoutControllers;
   final SignatureController _embarcoSignatureController =
       SignatureController(penStrokeWidth: 2, penColor: Colors.black);
@@ -132,12 +133,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     } else {
       _fechaController.text = _formatDate(DateTime.now());
       setState(() {
-        _addCargaItem();
+        _addNewSection(); 
       });
     }
   }
 
-  // --- Helpers de Fecha ---
   String _formatDate(DateTime date) {
     try {
       return DateFormat('dd-MMM-yyyy', 'es_ES').format(date).toUpperCase();
@@ -164,20 +164,37 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Lógica Carga ---
-  void _addCargaItem() {
+  // --- Lógica Carga (MULTISECCIÓN) ---
+  void _addNewSection() {
+    setState(() {
+      _cargaSectionsControllers.add([]); 
+      _addItemToSection(_cargaSectionsControllers.length - 1); 
+    });
+  }
+
+  void _removeSection(int sectionIndex) {
+    setState(() {
+      for (var controller in _cargaSectionsControllers[sectionIndex]) {
+        controller.dispose();
+      }
+      _cargaSectionsControllers.removeAt(sectionIndex);
+      _calculateTotals();
+    });
+  }
+
+  void _addItemToSection(int sectionIndex) {
     final newControllers = _CargaItemControllers(CargaItem());
     newControllers.pallets.addListener(_calculateTotals);
     newControllers.cajasPorPallet.addListener(_calculateTotals);
     setState(() {
-      _cargaItemControllers.add(newControllers);
+      _cargaSectionsControllers[sectionIndex].add(newControllers);
     });
   }
 
-  void _removeCargaItem(int index) {
+  void _removeItemFromSection(int sectionIndex, int itemIndex) {
     setState(() {
-      _cargaItemControllers[index].dispose();
-      _cargaItemControllers.removeAt(index);
+      _cargaSectionsControllers[sectionIndex][itemIndex].dispose();
+      _cargaSectionsControllers[sectionIndex].removeAt(itemIndex);
       _calculateTotals();
     });
   }
@@ -186,14 +203,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     int currentTotalPallets = 0;
     int currentTotalCajas = 0;
 
-    for (final controllers in _cargaItemControllers) {
-      final pallets = int.tryParse(controllers.pallets.text) ?? 0;
-      final cajasPorPallet = int.tryParse(controllers.cajasPorPallet.text) ?? 0;
-      final cajas = pallets * cajasPorPallet;
+    for (var section in _cargaSectionsControllers) {
+      for (var controllers in section) {
+        final pallets = int.tryParse(controllers.pallets.text) ?? 0;
+        final cajasPorPallet = int.tryParse(controllers.cajasPorPallet.text) ?? 0;
+        final cajas = pallets * cajasPorPallet;
 
-      controllers.cajas.text = cajas.toString();
-      currentTotalPallets += pallets;
-      currentTotalCajas += cajas;
+        controllers.cajas.text = cajas.toString();
+        currentTotalPallets += pallets;
+        currentTotalCajas += cajas;
+      }
     }
 
     if (mounted) {
@@ -204,7 +223,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Funciones para Fotos ---
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
@@ -229,7 +247,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     });
   }
 
-  // --- Carga de Datos ---
   void _loadManifestData(ManifestData manifest) async { 
     _trailerNoController.text = manifest.trailerNo;
     _productorController.text = manifest.productor;
@@ -273,18 +290,26 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
     if (mounted) {
       setState(() {
-        for (final controller in _cargaItemControllers) {
-          controller.dispose();
+        for (var section in _cargaSectionsControllers) {
+          for (var controller in section) {
+            controller.dispose();
+          }
         }
-        _cargaItemControllers = manifest.carga.map((item) {
-          final newControllers = _CargaItemControllers(item);
-          newControllers.pallets.addListener(_calculateTotals);
-          newControllers.cajasPorPallet.addListener(_calculateTotals);
-          return newControllers;
-        }).toList();
+        _cargaSectionsControllers.clear();
 
-        if (_cargaItemControllers.isEmpty) {
-          _addCargaItem();
+        for (var sectionData in manifest.carga) {
+          List<_CargaItemControllers> sectionControllers = [];
+          for (var item in sectionData) {
+            final newControllers = _CargaItemControllers(item);
+            newControllers.pallets.addListener(_calculateTotals);
+            newControllers.cajasPorPallet.addListener(_calculateTotals);
+            sectionControllers.add(newControllers);
+          }
+          _cargaSectionsControllers.add(sectionControllers);
+        }
+
+        if (_cargaSectionsControllers.isEmpty) {
+          _addNewSection();
         }
 
         for (final entry in manifest.trailerLayout.entries) {
@@ -326,8 +351,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _embarcoSignatureController.dispose();
     _recibioSignatureController.dispose();
     _trailerLayoutControllers.forEach((_, controller) => controller.dispose());
-    for (final controllers in _cargaItemControllers) {
-      controllers.dispose();
+    for (var section in _cargaSectionsControllers) {
+      for (var controller in section) {
+        controller.dispose();
+      }
     }
     super.dispose();
   }
@@ -351,6 +378,17 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       return data.map((json) => Operator.fromMap(json));
     } catch (e) {
       _showErrorSnackbar('Error al buscar operadores: $e');
+      return const Iterable.empty();
+    }
+  }
+
+  Future<Iterable<Employee>> _searchEmployees(String query) async {
+    if (query.isEmpty) return const Iterable.empty();
+    try {
+      final data = await _supabaseService.searchEmployees(query);
+      return data.map((json) => Employee.fromMap(json));
+    } catch (e) {
+      _showErrorSnackbar('Error al buscar empleados: $e');
       return const Iterable.empty();
     }
   }
@@ -384,7 +422,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     ) ?? false;
   }
 
-  // --- Validaciones ---
   bool _validateAllSteps() {
     if (_trailerNoController.text.isEmpty ||
         _productorController.text.isEmpty ||
@@ -400,17 +437,22 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _showErrorSnackbar('Error en "Transportista": Falta "Operador".');
       return false;
     }
-    if (_cargaItemControllers.isEmpty) {
-      _showErrorSnackbar('Error en "Carga": Debe añadir al menos un producto.');
+    if (_cargaSectionsControllers.isEmpty) {
+      _showErrorSnackbar('Error en "Carga": Debe añadir al menos una sección de carga.');
       return false;
     }
-    for (int i = 0; i < _cargaItemControllers.length; i++) {
-      final item = _cargaItemControllers[i];
-      if (item.producto.text.isEmpty ||
-          (int.tryParse(item.pallets.text) ?? 0) <= 0 ||
-          (int.tryParse(item.cajasPorPallet.text) ?? 0) <= 0) {
-        _showErrorSnackbar('Error en "Carga" (Producto ${i + 1}): Datos inválidos.');
+    for (int i = 0; i < _cargaSectionsControllers.length; i++) {
+      if (_cargaSectionsControllers[i].isEmpty) {
+        _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): La sección está vacía.');
         return false;
+      }
+      for (var controller in _cargaSectionsControllers[i]) {
+        if (controller.producto.text.isEmpty ||
+            (int.tryParse(controller.pallets.text) ?? 0) <= 0 ||
+            (int.tryParse(controller.cajasPorPallet.text) ?? 0) <= 0) {
+          _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): Datos inválidos en productos.');
+          return false;
+        }
       }
     }
     if (_embarcoNombreController.text.isEmpty ||
@@ -446,7 +488,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       else if (_currentStep == 1) isValidCurrent = _formKeyStep1.currentState!.validate();
       else if (_currentStep == 2) isValidCurrent = _formKeyStep2.currentState!.validate();
       else if (_currentStep == 3) {
-        isValidCurrent = _cargaItemControllers.isNotEmpty;
+        isValidCurrent = _cargaSectionsControllers.isNotEmpty && 
+                         _cargaSectionsControllers.every((s) => s.isNotEmpty);
         if (!isValidCurrent) _showErrorSnackbar('Añada carga antes de continuar.');
       }
       else if (_currentStep == 4) isValidCurrent = _formKeyStep4.currentState!.validate();
@@ -465,7 +508,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Descarga Bytes ---
   Future<Uint8List?> _downloadBytesFromUrl(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -483,7 +525,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- GUARDAR Y GENERAR PDF ---
   Future<void> _generateAndSavePdf() async {
     setState(() => _isLoading = true);
     try {
@@ -493,7 +534,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       Uint8List? bdEmbarcoBytes;
       Uint8List? bdRecibioBytes;
 
-      // 1. EMBARCO
       if (_embarcoSignatureController.isNotEmpty) {
         final bytes = await _embarcoSignatureController.toPngBytes();
         pdfEmbarcoBytes = bytes;
@@ -503,7 +543,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         bdEmbarcoBytes = null; 
       }
 
-      // 2. RECIBIO
       if (_recibioSignatureController.isNotEmpty) {
         final bytes = await _recibioSignatureController.toPngBytes();
         pdfRecibioBytes = bytes;
@@ -518,14 +557,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         if (controller.text.isNotEmpty) layoutMap[key.toString()] = controller.text;
       });
 
-      final cargaItems = _cargaItemControllers.map((controllers) {
-        return CargaItem(
-          producto: controllers.producto.text,
-          etiquetas: controllers.etiquetas.text,
-          tamano: controllers.tamano.text,
-          pallets: int.tryParse(controllers.pallets.text) ?? 0,
-          cajasPorPallet: int.tryParse(controllers.cajasPorPallet.text) ?? 0,
-        );
+      final List<List<CargaItem>> cargaCompleta = _cargaSectionsControllers.map((section) {
+        return section.map((controllers) {
+          return CargaItem(
+            producto: controllers.producto.text,
+            etiquetas: controllers.etiquetas.text,
+            tamano: controllers.tamano.text,
+            pallets: int.tryParse(controllers.pallets.text) ?? 0,
+            cajasPorPallet: int.tryParse(controllers.cajasPorPallet.text) ?? 0,
+          );
+        }).toList();
       }).toList();
 
       final dataForBd = ManifestData(
@@ -550,7 +591,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         anticipoFlete: int.tryParse(_anticipoFleteController.text) ?? 0,
         cartaPorteNo: _cartaPorteNoController.text,
         ctaChequesTransportista: _ctaChequesTransportistaController.text,
-        carga: cargaItems,
+        carga: cargaCompleta, 
         observaciones: _observacionesController.text,
         embarcoNombre: _embarcoNombreController.text,
         recibioNombre: _recibioNombreController.text,
@@ -646,7 +687,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               ? 'Nuevo Manifiesto'
               : 'Detalles del Manifiesto'),
           actions: [
-            // --- NUEVO: Botón de Guardar en la barra superior ---
             if (!_isLoading)
               IconButton(
                 icon: const Icon(Icons.save),
@@ -982,116 +1022,170 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   Widget _buildCargaTable() {
     return Column(
       children: [
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _cargaItemControllers.length,
-          itemBuilder: (context, index) {
-            final controllers = _cargaItemControllers[index];
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Form(
-                  key: controllers.formKey,
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Producto ${index + 1}',
-                              style: Theme.of(context).textTheme.titleMedium),
-                          if (_cargaItemControllers.length > 1)
-                            IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _removeCargaItem(index))
-                        ],
-                      ),
-                      TextFormField(
-                        controller: controllers.producto,
-                        focusNode: controllers.productoNode,
-                        decoration: const InputDecoration(labelText: 'Producto'),
-                        onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
-                        textInputAction: TextInputAction.next,
-                        validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
-                      ),
-                      TextFormField(
-                          controller: controllers.etiquetas,
-                          focusNode: controllers.etiquetasNode,
-                          decoration: const InputDecoration(labelText: 'Etiquetas'),
-                          onEditingComplete: () => controllers.tamanoNode.requestFocus(),
-                          textInputAction: TextInputAction.next),
-                      TextFormField(
-                          controller: controllers.tamano,
-                          focusNode: controllers.tamanoNode,
-                          decoration: const InputDecoration(labelText: 'Tamaño'),
-                          onEditingComplete: () => controllers.palletsNode.requestFocus(),
-                          textInputAction: TextInputAction.next),
-                      Row(
-                        children: [
-                          Expanded(
-                              child: TextFormField(
-                                  controller: controllers.pallets,
-                                  focusNode: controllers.palletsNode,
-                                  decoration: const InputDecoration(labelText: 'No. Pallets'),
-                                  keyboardType: TextInputType.number,
-                                  onEditingComplete: () => controllers.cajasPorPalletNode.requestFocus(),
-                                  textInputAction: TextInputAction.next,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) return 'Obligatorio';
-                                    if ((int.tryParse(v) ?? 0) <= 0) return 'Debe ser > 0';
-                                    return null;
-                                  })),
-                          const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 8.0),
-                              child: Text('x')),
-                          Expanded(
-                              child: TextFormField(
-                                  controller: controllers.cajasPorPallet,
-                                  focusNode: controllers.cajasPorPalletNode,
-                                  decoration: const InputDecoration(labelText: 'Cajas x Pallet'),
-                                  keyboardType: TextInputType.number,
-                                  textInputAction: TextInputAction.done,
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) return 'Obligatorio';
-                                    if ((int.tryParse(v) ?? 0) <= 0) return 'Debe ser > 0';
-                                    return null;
-                                  })),
-                        ],
-                      ),
-                      TextFormField(
-                          controller: controllers.cajas,
-                          decoration: const InputDecoration(labelText: 'Cajas (Total)'),
-                          readOnly: true),
-                    ],
+        for (int sectionIndex = 0; sectionIndex < _cargaSectionsControllers.length; sectionIndex++) ...[
+          if (sectionIndex > 0) const Divider(thickness: 2, height: 40, color: Colors.blueGrey),
+          
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Carga ${sectionIndex + 1}', 
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                if (_cargaSectionsControllers.length > 1)
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                    label: const Text('Borrar Sección', style: TextStyle(color: Colors.red)),
+                    onPressed: () => _removeSection(sectionIndex),
+                  ),
+              ],
+            ),
+          ),
+
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _cargaSectionsControllers[sectionIndex].length,
+            itemBuilder: (context, itemIndex) {
+              final controllers = _cargaSectionsControllers[sectionIndex][itemIndex];
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Form(
+                    key: controllers.formKey,
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Producto ${itemIndex + 1}',
+                                style: Theme.of(context).textTheme.titleMedium),
+                            if (_cargaSectionsControllers[sectionIndex].length > 1)
+                              IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _removeItemFromSection(sectionIndex, itemIndex))
+                          ],
+                        ),
+                        TextFormField(
+                          controller: controllers.producto,
+                          focusNode: controllers.productoNode,
+                          decoration: const InputDecoration(labelText: 'Producto'),
+                          onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
+                          textInputAction: TextInputAction.next,
+                          validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                        ),
+                        TextFormField(
+                            controller: controllers.etiquetas,
+                            focusNode: controllers.etiquetasNode,
+                            decoration: const InputDecoration(labelText: 'Etiquetas'),
+                            onEditingComplete: () => controllers.tamanoNode.requestFocus(),
+                            textInputAction: TextInputAction.next),
+                        TextFormField(
+                            controller: controllers.tamano,
+                            focusNode: controllers.tamanoNode,
+                            decoration: const InputDecoration(labelText: 'Tamaño'),
+                            onEditingComplete: () => controllers.palletsNode.requestFocus(),
+                            textInputAction: TextInputAction.next),
+                        Row(
+                          children: [
+                            Expanded(
+                                child: TextFormField(
+                                    controller: controllers.pallets,
+                                    focusNode: controllers.palletsNode,
+                                    decoration: const InputDecoration(labelText: 'No. Pallets'),
+                                    keyboardType: TextInputType.number,
+                                    onEditingComplete: () => controllers.cajasPorPalletNode.requestFocus(),
+                                    textInputAction: TextInputAction.next,
+                                    validator: (v) {
+                                      if (v == null || v.isEmpty) return 'Obligatorio';
+                                      if ((int.tryParse(v) ?? 0) <= 0) return 'Debe ser > 0';
+                                      return null;
+                                    })),
+                            const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Text('x')),
+                            Expanded(
+                                child: TextFormField(
+                                    controller: controllers.cajasPorPallet,
+                                    focusNode: controllers.cajasPorPalletNode,
+                                    decoration: const InputDecoration(labelText: 'Cajas x Pallet'),
+                                    keyboardType: TextInputType.number,
+                                    textInputAction: TextInputAction.done,
+                                    validator: (v) {
+                                      if (v == null || v.isEmpty) return 'Obligatorio';
+                                      if ((int.tryParse(v) ?? 0) <= 0) return 'Debe ser > 0';
+                                      return null;
+                                    })),
+                          ],
+                        ),
+                        TextFormField(
+                            controller: controllers.cajas,
+                            decoration: const InputDecoration(labelText: 'Cajas (Total)'),
+                            readOnly: true),
+                      ],
+                    ),
                   ),
                 ),
+              );
+            },
+          ),
+          
+          Builder(builder: (context) {
+            int sectionPallets = 0;
+            int sectionCajas = 0;
+            for (var controller in _cargaSectionsControllers[sectionIndex]) {
+              int p = int.tryParse(controller.pallets.text) ?? 0;
+              int cp = int.tryParse(controller.cajasPorPallet.text) ?? 0;
+              sectionPallets += p;
+              sectionCajas += (p * cp);
+            }
+            return Padding(
+              padding: const EdgeInsets.only(right: 16.0, bottom: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text('Subtotal Carga ${sectionIndex + 1}: ', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+                  const SizedBox(width: 10),
+                  Text('$sectionPallets p.', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 20),
+                  Text('$sectionCajas c.', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
               ),
             );
-          },
+          }),
+
+          TextButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Añadir Producto'),
+              onPressed: () => _addItemToSection(sectionIndex)),
+        ],
+
+        const SizedBox(height: 20),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.library_add),
+          label: const Text('AÑADIR OTRA CARGA (Nueva Tabla)'),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue),
+          onPressed: _addNewSection,
         ),
-        const SizedBox(height: 8),
-        TextButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Añadir Producto'),
-            onPressed: () => _addCargaItem()),
+
         const Divider(height: 32),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Text('TOTALES: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('GRAN TOTAL: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               SizedBox(
                   width: 80,
                   child: Text('$_totalPallets p.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold))),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
               SizedBox(
                   width: 80,
                   child: Text('$_totalCajas',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold))),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
             ],
           ),
         )
@@ -1117,7 +1211,18 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 setState(() {
                   _embarcoFirmaUrl = null;
                 });
-              }),
+              },
+              // PASAMOS EL CALLBACK -> SE ACTIVA AUTOCOMPLETE
+              onEmployeeSelected: (employee) {
+                setState(() {
+                  _embarcoNombreController.text = employee.name;
+                  if (employee.signatureUrl != null) {
+                    _embarcoFirmaUrl = employee.signatureUrl;
+                    _embarcoSignatureController.clear(); 
+                  }
+                });
+              }
+          ),
           const SizedBox(height: 24),
           _buildSignaturePad(
               title: 'RECIBIÓ (NOMBRE y FIRMA)',
@@ -1128,7 +1233,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 setState(() {
                   _recibioFirmaUrl = null;
                 });
-              }),
+              },
+              // NO PASAMOS EL CALLBACK -> SE MANTIENE MANUAL
+              onEmployeeSelected: null 
+          ),
         ],
       ),
     );
@@ -1140,6 +1248,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     required SignatureController signatureController,
     String? existingUrl,
     VoidCallback? onClearUrl,
+    Function(Employee)? onEmployeeSelected,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1199,16 +1308,49 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   onPressed: () => signatureController.clear()),
             ],
           ),
-        TextFormField(
-          controller: nameController,
-          decoration: const InputDecoration(labelText: 'Nombre'),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'El nombre es obligatorio';
-            }
-            return null;
-          },
-        ),
+        
+        // --- CONDICIÓN: Si hay callback, usamos Autocomplete. Si no, TextFormField ---
+        if (onEmployeeSelected != null)
+          Autocomplete<Employee>(
+            optionsBuilder: (textEditingValue) => _searchEmployees(textEditingValue.text),
+            displayStringForOption: (option) => option.name,
+            onSelected: (selection) {
+              onEmployeeSelected(selection);
+            },
+            fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (textEditingController.text != nameController.text) {
+                  textEditingController.text = nameController.text;
+                }
+              });
+              
+              return TextFormField(
+                controller: textEditingController,
+                focusNode: focusNode,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'El nombre es obligatorio';
+                  }
+                  return null;
+                },
+                onChanged: (val) {
+                  nameController.text = val;
+                },
+              );
+            },
+          )
+        else
+          TextFormField(
+            controller: nameController,
+            decoration: const InputDecoration(labelText: 'Nombre'),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'El nombre es obligatorio';
+              }
+              return null;
+            },
+          ),
       ],
     );
   }

@@ -22,39 +22,41 @@ class ManifestData {
   final int anticipoFlete;
   final String cartaPorteNo;
   final String ctaChequesTransportista;
-  final List<CargaItem> carga;
+  
+  // --- CAMBIO PRINCIPAL: Ahora es una Lista de Listas (Secciones de Carga) ---
+  final List<List<CargaItem>> carga; 
+  
   final String observaciones;
   final String embarcoNombre;
   final String recibioNombre;
   final Map<String, String> trailerLayout;
+  
+  // Firmas
+  final Uint8List? embarcoFirmaBytes;
+  final Uint8List? recibioFirmaBytes;
   final String? embarcoFirmaUrl;
   final String? recibioFirmaUrl;
 
-
-  // MODIFICACIÓN: Se añade el campo para la URL del PDF
+  // Evidencia
+  final List<String>? evidencePhotosUrls;
+  final List<Uint8List>? evidencePhotosBytes;
+  
+  // PDF URL
   final String? pdfUrl;
-
-  // Transient fields for images
-  final Uint8List? embarcoFirmaBytes;
-  final Uint8List? recibioFirmaBytes;
-
-  // --- NUEVOS CAMPOS ---
-  final List<String>? evidencePhotosUrls; // URLs guardadas
-  final List<Uint8List>? evidencePhotosBytes; // Fotos nuevas o descargadas para PDF
 
   ManifestData({
     this.id,
-    this.trailerNo = '',
-    this.productor = '',
+    required this.trailerNo,
+    required this.productor,
     this.certificadoOrigen = '',
     this.guiaFitosanitaria = '',
-    this.fecha = '',
-    this.consignadoA = '',
+    required this.fecha,
+    required this.consignadoA,
     this.factura = '',
     this.domicilio = '',
     this.ciudad = '',
     this.condiciones = '',
-    this.operador = '',
+    required this.operador,
     this.trailer = '',
     this.placas = '',
     this.caja = '',
@@ -64,65 +66,19 @@ class ManifestData {
     this.anticipoFlete = 0,
     this.cartaPorteNo = '',
     this.ctaChequesTransportista = '',
-    this.carga = const [],
+    required this.carga,
     this.observaciones = '',
-    this.embarcoNombre = '',
-    this.recibioNombre = '',
-    this.trailerLayout = const {},
-    this.embarcoFirmaUrl,
-    this.recibioFirmaUrl,
-    this.pdfUrl, // Se añade al constructor
+    required this.embarcoNombre,
+    required this.recibioNombre,
+    required this.trailerLayout,
     this.embarcoFirmaBytes,
     this.recibioFirmaBytes,
+    this.embarcoFirmaUrl,
+    this.recibioFirmaUrl,
     this.evidencePhotosUrls,
     this.evidencePhotosBytes,
+    this.pdfUrl,
   });
-
-  factory ManifestData.fromMap(Map<String, dynamic> map) {
-    final cargaList = (map['carga'] as List<dynamic>?)
-            ?.map((item) => CargaItem.fromMap(item as Map<String, dynamic>))
-            .toList() ??
-        [];
-    
-    final layoutMap = (map['trailer_layout'] as Map<String, dynamic>?)?.map(
-          (key, value) => MapEntry(key, value.toString()),
-        ) ?? {};
-
-    return ManifestData(
-      id: map['id'],
-      trailerNo: map['trailer_no'] ?? '',
-      productor: map['productor'] ?? '',
-      certificadoOrigen: map['certificado_origen'] ?? '',
-      guiaFitosanitaria: map['guia_fitosanitaria'] ?? '',
-      fecha: map['fecha'] ?? '',
-      consignadoA: map['consignado_a'] ?? '',
-      factura: map['factura'] ?? '',
-      domicilio: map['domicilio'] ?? '',
-      ciudad: map['ciudad'] ?? '',
-      condiciones: map['condiciones'] ?? '',
-      operador: map['operador'] ?? '',
-      trailer: map['trailer'] ?? '',
-      placas: map['placas'] ?? '',
-      caja: map['caja'] ?? '',
-      lineaTransportista: map['linea_transportista'] ?? '',
-      tel: map['tel'] ?? '',
-      importeFlete: map['importe_flete'] ?? 0,
-      anticipoFlete: map['anticipo_flete'] ?? 0,
-      cartaPorteNo: map['carta_porte_no'] ?? '',
-      ctaChequesTransportista: map['cta_cheques_transportista'] ?? '',
-      carga: cargaList,
-      observaciones: map['observaciones'] ?? '',
-      embarcoNombre: map['embarco_nombre'] ?? '',
-      recibioNombre: map['recibio_nombre'] ?? '',
-      trailerLayout: layoutMap,
-      embarcoFirmaUrl: map['embarco_firma_url'],
-      recibioFirmaUrl: map['recibio_firma_url'],
-      pdfUrl: map['pdf_url'], // Se lee desde el mapa
-      evidencePhotosUrls: map['evidence_photos_urls'] != null 
-          ? List<String>.from(map['evidence_photos_urls']) 
-          : [],
-    );
-  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -147,27 +103,89 @@ class ManifestData {
       'anticipo_flete': anticipoFlete,
       'carta_porte_no': cartaPorteNo,
       'cta_cheques_transportista': ctaChequesTransportista,
-      'carga': carga.map((item) => item.toMap()).toList(),
+      
+      // Serializamos la lista de listas
+      'carga': carga.map((section) => section.map((item) => item.toMap()).toList()).toList(),
+      
       'observaciones': observaciones,
       'embarco_nombre': embarcoNombre,
       'recibio_nombre': recibioNombre,
       'trailer_layout': trailerLayout,
       'embarco_firma_url': embarcoFirmaUrl,
       'recibio_firma_url': recibioFirmaUrl,
-      'pdf_url': pdfUrl, // Se añade al mapa
       'evidence_photos_urls': evidencePhotosUrls,
+      'pdf_url': pdfUrl,
     };
+  }
+
+  factory ManifestData.fromMap(Map<String, dynamic> map) {
+    // Lógica para leer la carga compatible con versiones anteriores
+    List<List<CargaItem>> parsedCarga = [];
+    
+    if (map['carga'] != null) {
+      final rawCarga = map['carga'] as List;
+      if (rawCarga.isNotEmpty) {
+        // Si el primer elemento es una lista, es el formato NUEVO (Lista de Listas)
+        if (rawCarga.first is List) {
+          parsedCarga = rawCarga.map((section) => 
+            (section as List).map((item) => CargaItem.fromMap(item)).toList()
+          ).toList();
+        } else {
+          // Si el primer elemento es un mapa, es el formato VIEJO (Lista plana)
+          // Lo envolvemos en una sola sección para no romper la app
+          parsedCarga = [
+            rawCarga.map((item) => CargaItem.fromMap(item)).toList()
+          ];
+        }
+      }
+    }
+
+    return ManifestData(
+      id: map['id'],
+      trailerNo: map['trailer_no'] ?? '',
+      productor: map['productor'] ?? '',
+      certificadoOrigen: map['certificado_origen'] ?? '',
+      guiaFitosanitaria: map['guia_fitosanitaria'] ?? '',
+      fecha: map['fecha'] ?? '',
+      consignadoA: map['consignado_a'] ?? '',
+      factura: map['factura'] ?? '',
+      domicilio: map['domicilio'] ?? '',
+      ciudad: map['ciudad'] ?? '',
+      condiciones: map['condiciones'] ?? '',
+      operador: map['operador'] ?? '',
+      trailer: map['trailer'] ?? '',
+      placas: map['placas'] ?? '',
+      caja: map['caja'] ?? '',
+      lineaTransportista: map['linea_transportista'] ?? '',
+      tel: map['tel'] ?? '',
+      importeFlete: map['importe_flete'] ?? 0,
+      anticipoFlete: map['anticipo_flete'] ?? 0,
+      cartaPorteNo: map['carta_porte_no'] ?? '',
+      ctaChequesTransportista: map['cta_cheques_transportista'] ?? '',
+      
+      carga: parsedCarga, // Usamos la carga procesada
+      
+      observaciones: map['observaciones'] ?? '',
+      embarcoNombre: map['embarco_nombre'] ?? '',
+      recibioNombre: map['recibio_nombre'] ?? '',
+      trailerLayout: Map<String, String>.from(map['trailer_layout'] ?? {}),
+      embarcoFirmaUrl: map['embarco_firma_url'],
+      recibioFirmaUrl: map['recibio_firma_url'],
+      evidencePhotosUrls: map['evidence_photos_urls'] != null 
+          ? List<String>.from(map['evidence_photos_urls']) 
+          : [],
+      pdfUrl: map['pdf_url'],
+    );
   }
 }
 
 class CargaItem {
-  String producto;
-  String etiquetas;
-  String tamano;
-  int pallets;
-  int cajasPorPallet;
-  
-  int get cajas => pallets * cajasPorPallet;
+  final String producto;
+  final String etiquetas;
+  final String tamano;
+  final int pallets;
+  final int cajasPorPallet;
+  final int cajas; // Calculado
 
   CargaItem({
     this.producto = '',
@@ -175,7 +193,17 @@ class CargaItem {
     this.tamano = '',
     this.pallets = 0,
     this.cajasPorPallet = 0,
-  });
+  }) : cajas = pallets * cajasPorPallet;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'producto': producto,
+      'etiquetas': etiquetas,
+      'tamano': tamano,
+      'pallets': pallets,
+      'cajas_por_pallet': cajasPorPallet,
+    };
+  }
 
   factory CargaItem.fromMap(Map<String, dynamic> map) {
     return CargaItem(
@@ -185,16 +213,5 @@ class CargaItem {
       pallets: map['pallets'] ?? 0,
       cajasPorPallet: map['cajas_por_pallet'] ?? 0,
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'producto': producto,
-      'etiquetas': etiquetas,
-      'tamano': tamano,
-      'pallets': pallets,
-      'cajas_por_pallet': cajasPorPallet,
-      'cajas': cajas,
-    };
   }
 }

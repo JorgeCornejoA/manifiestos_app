@@ -7,8 +7,6 @@ class PdfGenerator {
   static Future<Uint8List> generatePdfBytes(ManifestData data) async {
     final pdf = pw.Document();
 
-    // Cargamos las fuentes
-    // Asegúrate de que estos assets existan en tu pubspec.yaml
     final font = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
     final boldFont = await rootBundle.load("assets/fonts/Roboto-Bold.ttf");
 
@@ -24,12 +22,13 @@ class PdfGenerator {
       pw.Page(
         theme: theme,
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+        // Reducimos un poco el margen vertical para ganar espacio arriba y abajo
+        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 20),
         build: (context) {
           return pw.Column(
             children: [
               _buildHeader(context, logoImage, data),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 5), // Menos espacio aquí
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -39,16 +38,24 @@ class PdfGenerator {
                       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                       children: [
                         _buildInfoSection(context, data),
-                        _buildCargaTable(context, data.carga),
-                        pw.SizedBox(height: 5),
+                        
+                        // Iteramos sobre las secciones de carga (Tablas compactas)
+                        ...data.carga.map((seccion) {
+                           return pw.Padding(
+                             padding: const pw.EdgeInsets.only(top: 5),
+                             child: _buildCargaTable(context, seccion)
+                           );
+                        }),
+
+                        pw.SizedBox(height: 4),
                         pw.Text('Observaciones: ${data.observaciones}',
-                            style: const pw.TextStyle(fontSize: 8)),
+                            style: const pw.TextStyle(fontSize: 8)), // Letra un poco más chica
                         pw.SizedBox(height: 10),
                         _buildAdditionalText(),
                       ],
                     ),
                   ),
-                  pw.SizedBox(width: 15),
+                  pw.SizedBox(width: 10),
                   pw.Expanded(
                     flex: 3,
                     child: _buildTrailerDiagram(context, data.trailerLayout),
@@ -63,7 +70,7 @@ class PdfGenerator {
       ),
     );
 
-    // --- NUEVO: PÁGINAS DE FOTOS ---
+    // Páginas de Fotos
     if (data.evidencePhotosBytes != null) {
       for (var photoBytes in data.evidencePhotosBytes!) {
         final image = pw.MemoryImage(photoBytes);
@@ -76,7 +83,7 @@ class PdfGenerator {
               return pw.Center(
                 child: pw.Image(
                   image,
-                  fit: pw.BoxFit.contain, // Ajusta la foto a la página sin recortar
+                  fit: pw.BoxFit.contain,
                 ),
               );
             },
@@ -97,30 +104,30 @@ class PdfGenerator {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Image(logo, width: 100),
+        pw.Image(logo, width: 90), // Logo un poco más pequeño
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
             pw.Text('FRUVER, S.A. DE C.V.',
                 style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
             pw.Text('R.F.C. FRU-940317-9D0',
-                style: const pw.TextStyle(fontSize: 8)),
+                style: const pw.TextStyle(fontSize: 7)),
             pw.Text('BLVD. GARCIA MORALES KM. 6.5 S/N COL. EL LLANO',
-                style: const pw.TextStyle(fontSize: 8)),
+                style: const pw.TextStyle(fontSize: 7)),
             pw.Text(
                 'TEL. (662) 236 0900   FAX (662) 236 0916 HERMOSILLO, SONORA.',
-                style: const pw.TextStyle(fontSize: 8)),
+                style: const pw.TextStyle(fontSize: 7)),
           ],
         ),
         pw.SizedBox(
-          width: 120,
+          width: 110,
           child: pw.Table(
             border: pw.TableBorder.all(),
             children: [
               pw.TableRow(children: [
                 pw.Container(
-                  padding: const pw.EdgeInsets.all(2),
+                  padding: const pw.EdgeInsets.all(1),
                   alignment: pw.Alignment.center,
                   color: PdfColors.lightBlue800,
                   child: pw.Text('TRAILER No.', style: headerTextStyle),
@@ -129,12 +136,12 @@ class PdfGenerator {
               pw.TableRow(children: [
                 pw.Container(
                   padding:
-                      const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   alignment: pw.Alignment.center,
                   child: pw.Text('T-${data.trailerNo}',
                       style: pw.TextStyle(
                           fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.red)),
+                          color: PdfColors.red, fontSize: 9)),
                 )
               ])
             ],
@@ -145,10 +152,11 @@ class PdfGenerator {
   }
 
   static pw.Widget _buildInfoSection(pw.Context context, ManifestData data) {
+    // Reducimos tamaños de fuente y padding para compactar info
     final labelStyle =
-        pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold);
-    final valueStyle = const pw.TextStyle(fontSize: 9);
-    final headerTextStyle = labelStyle.copyWith(color: PdfColors.white, fontSize: 8);
+        pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold);
+    final valueStyle = const pw.TextStyle(fontSize: 8);
+    final headerTextStyle = labelStyle.copyWith(color: PdfColors.white, fontSize: 7);
 
     pw.Widget buildTitledCell(String title, String value) {
       return pw.Container(
@@ -158,12 +166,12 @@ class PdfGenerator {
           children: [
             pw.Container(
               color: PdfColors.blue100,
-              padding: const pw.EdgeInsets.fromLTRB(4, 2, 4, 2),
+              padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 1), // Padding reducido
               child: pw.Text(title, style: labelStyle),
             ),
             pw.Container(
-              padding: const pw.EdgeInsets.fromLTRB(4, 4, 4, 4),
-              constraints: const pw.BoxConstraints(minHeight: 15),
+              padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 1.5), // Padding reducido
+              constraints: const pw.BoxConstraints(minHeight: 11), // Altura mínima reducida
               child: pw.Text(value, style: valueStyle),
             ),
           ],
@@ -173,7 +181,7 @@ class PdfGenerator {
 
     pw.Widget headerCell(String text) => pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.all(2),
+          padding: const pw.EdgeInsets.all(1),
           alignment: pw.Alignment.center,
           color: PdfColors.lightBlue800,
           child: pw.Text(text, style: headerTextStyle),
@@ -220,7 +228,7 @@ class PdfGenerator {
   }
 
   static pw.Widget _buildCargaTable(pw.Context context, List<CargaItem> carga) {
-    final headerTextStyle = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
+    final headerTextStyle = pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
 
     final totalPallets = carga.fold<int>(0, (sum, item) => sum + item.pallets);
     final totalCajas = carga.fold<int>(0, (sum, item) => sum + item.cajas);
@@ -236,7 +244,7 @@ class PdfGenerator {
           child: pw.Text("DATOS DE LA CARGA", style: headerTextStyle),
         ),
         pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),
+          border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
           columnWidths: const {
             0: pw.FlexColumnWidth(3),
             1: pw.FlexColumnWidth(3),
@@ -274,7 +282,7 @@ class PdfGenerator {
               children: [
                 _emptyCell(),
                 _emptyCell(),
-                _totalsCell('TOTALES:'),
+                _totalsCell('SUBTOTAL:'),
                 _totalsCell('$totalPallets p.'),
                 _totalsCell(totalCajas.toString()),
               ],
@@ -285,37 +293,39 @@ class PdfGenerator {
     );
   }
 
+  // --- CELDAS COMPACTAS (AQUÍ ESTÁ LA MAGIA DEL AHORRO) ---
   static pw.Widget _cell(String text) => pw.Container(
-        padding: const pw.EdgeInsets.all(4),
+        // Relleno reducido: Vertical 1.5, Horizontal 2
+        padding: const pw.EdgeInsets.symmetric(vertical: 1.5, horizontal: 2),
         alignment: pw.Alignment.centerLeft,
         child: pw.Text(text, style: const pw.TextStyle(fontSize: 8)),
       );
 
   static pw.Widget _cellHeader(String text) => pw.Container(
-        padding: const pw.EdgeInsets.all(4),
+        padding: const pw.EdgeInsets.symmetric(vertical: 1.5, horizontal: 2),
         alignment: pw.Alignment.center,
         child: pw.Text(text,
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
       );
 
   static pw.Widget _emptyCell() => pw.Container(
-        height: 18,
+        height: 10, // Altura reducida para celdas vacías
         decoration: const pw.BoxDecoration(
           border: pw.Border(
-            top: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            top: pw.BorderSide(color: PdfColors.black, width: 0.5),
           ),
         ),
       );
 
   static pw.Widget _totalsCell(String text) => pw.Container(
-        padding: const pw.EdgeInsets.all(4),
+        padding: const pw.EdgeInsets.symmetric(vertical: 2.3, horizontal: 2),
         alignment: pw.Alignment.center,
         decoration: const pw.BoxDecoration(
           border: pw.Border(
-            left: pw.BorderSide(color: PdfColors.black, width: 0.8),
-            top: pw.BorderSide(color: PdfColors.black, width: 0.8),
-            right: pw.BorderSide(color: PdfColors.black, width: 0.8),
-            bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            left: pw.BorderSide(color: PdfColors.black, width: 0.5),
+            top: pw.BorderSide(color: PdfColors.black, width: 0.5),
+            right: pw.BorderSide(color: PdfColors.black, width: 0.5),
+            bottom: pw.BorderSide(color: PdfColors.black, width: 0.5),
           ),
         ),
         child: pw.Text(text,
@@ -323,11 +333,10 @@ class PdfGenerator {
       );
 
   static pw.Widget _buildAdditionalText() {
-    final style = const pw.TextStyle(fontSize: 8);
+    final style = const pw.TextStyle(fontSize: 7); // Fuente más chica
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.SizedBox(height: 8),
         pw.Text(
           'Cualquier daño al producto en el trayecto a su destino corre por cuenta y riesgo de la Línea Transportista. También indico mi conformidad de que el importe del flete se depositará a la cuenta indicada anteriormente una vez que sea entregada la carga completa y de conformidad.',
           style: style,
@@ -336,30 +345,25 @@ class PdfGenerator {
     );
   }
 
-  // --- MODIFICACIÓN DE FIRMAS Y HORA ---
   static pw.Widget _buildSignatureSection(pw.Context context, ManifestData data) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
-        // Firma Embarco
         _signatureBox(context, 'EMBARCÓ (NOMBRE Y FIRMA)', data.embarcoNombre, data.embarcoFirmaBytes),
         
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            // Firma Recibió
             _signatureBox(context, 'RECIBIÓ (NOMBRE Y FIRMA)', data.recibioNombre, data.recibioFirmaBytes),
             
             pw.SizedBox(width: 10),
             
-            // Sección HORA ajustada
             pw.Column(
               children: [
                 pw.Container(width: 80, height: 1, color: PdfColors.black),
                 pw.SizedBox(height: 2),
                 pw.Text('HORA:', style: const pw.TextStyle(fontSize: 8)),
-                // --- CAMBIO: Este espacio empuja "HORA" hacia arriba ---
                 pw.SizedBox(height: 25), 
               ],
             )
@@ -369,26 +373,25 @@ class PdfGenerator {
     );
   }
 
-  // --- MODIFICACIÓN: Box de firma centrado ---
   static pw.Widget _signatureBox(
       pw.Context context, String title, String name, Uint8List? signatureBytes) {
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center, // Centrar contenido horizontalmente
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         if (signatureBytes != null && signatureBytes.isNotEmpty)
-          pw.Image(pw.MemoryImage(signatureBytes), height: 40, width: 100) // Ajusté tamaño para que se vea mejor
+          pw.Image(pw.MemoryImage(signatureBytes), height: 35, width: 90)
         else
-          pw.SizedBox(height: 40, width: 100),
+          pw.SizedBox(height: 35, width: 90),
         
-        pw.Container(width: 150, child: pw.Divider()), // La línea divisoria
+        pw.Container(width: 140, child: pw.Divider()),
         
         pw.Text(name, 
-          style: const pw.TextStyle(fontSize: 8), 
-          textAlign: pw.TextAlign.center // Texto centrado
+          style: const pw.TextStyle(fontSize: 7), 
+          textAlign: pw.TextAlign.center
         ),
         pw.Text(title, 
-          style: const pw.TextStyle(fontSize: 8), 
-          textAlign: pw.TextAlign.center // Texto centrado
+          style: const pw.TextStyle(fontSize: 7), 
+          textAlign: pw.TextAlign.center
         ),
       ],
     );
@@ -399,13 +402,14 @@ class PdfGenerator {
     for (int i = 0; i < 15; i++) {
       final index1 = i * 2;
       final index2 = i * 2 + 1;
+      // Diagrama compactado
       rows.add(pw.TableRow(
         verticalAlignment: pw.TableCellVerticalAlignment.middle,
         children: [
-          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index1 + 1}', style: const pw.TextStyle(fontSize: 8))),
-          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text(layout[index1.toString()] ?? '', style: const pw.TextStyle(fontSize: 8))),
-          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text(layout[index2.toString()] ?? '', style: const pw.TextStyle(fontSize: 8))),
-          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index2 + 1}', style: const pw.TextStyle(fontSize: 8))),
+          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index1 + 1}', style: const pw.TextStyle(fontSize: 7))),
+          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text(layout[index1.toString()] ?? '', style: const pw.TextStyle(fontSize: 7))),
+          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text(layout[index2.toString()] ?? '', style: const pw.TextStyle(fontSize: 7))),
+          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index2 + 1}', style: const pw.TextStyle(fontSize: 7))),
         ],
       ));
     }
@@ -415,7 +419,7 @@ class PdfGenerator {
         pw.Text('DIFUSOR', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
         pw.SizedBox(height: 2),
         pw.Table(
-          border: pw.TableBorder.all(),
+          border: pw.TableBorder.all(width: 0.5),
           columnWidths: const {
             0: pw.IntrinsicColumnWidth(),
             1: pw.FlexColumnWidth(1),

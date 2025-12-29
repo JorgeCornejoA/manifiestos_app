@@ -3,6 +3,7 @@ import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
+import 'package:manifiestos_app/models/employee.dart'; // <--- ESTE ES EL QUE FALTABA
 import 'package:uuid/uuid.dart';
 
 class SupabaseService {
@@ -16,25 +17,16 @@ class SupabaseService {
       String? embarcoFirmaUrl = data.embarcoFirmaUrl;
       String? recibioFirmaUrl = data.recibioFirmaUrl;
       
-      // --- NUEVO: Lógica para Fotos de Evidencia ---
-      // 1. Iniciamos con las URLs que ya existían
+      // --- Lógica para Fotos de Evidencia ---
       List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
 
-      // 2. Si hay fotos nuevas (bytes), las subimos una por una
       if (data.evidencePhotosBytes != null && data.evidencePhotosBytes!.isNotEmpty) {
-        // NOTA: Para simplificar, en este ejemplo asumimos que "bytes" contiene SOLO las nuevas.
-        // En la práctica real del formulario, combinaremos todo.
         
-        // Pero espera, tu UI mandará TODAS las fotos (viejas descargadas + nuevas) como bytes para el PDF.
-        // Para la BD, lo ideal es subir las nuevas. 
-        // TRUCO: Vamos a subir todas las que vengan en bytes y reemplazar la lista. 
-        // Es un poco ineficiente re-subir, pero es lo más seguro para evitar conflictos de índices ahora.
-        
-        finalPhotoUrls.clear(); // Limpiamos para reconstruir la lista con las fotos actuales
+        // Limpiamos para reconstruir la lista con las fotos actuales
+        finalPhotoUrls.clear(); 
         
         for (int i = 0; i < data.evidencePhotosBytes!.length; i++) {
           final bytes = data.evidencePhotosBytes![i];
-          // Usamos un nombre único para cada foto
           final uniqueName = '${_uuid.v4()}.png'; 
           final path = 'evidence/$manifestId/$uniqueName';
           
@@ -48,26 +40,36 @@ class SupabaseService {
           finalPhotoUrls.add(url);
         }
       }
-      // ---------------------------------------------
 
-      // ... (Lógica de firmas existente igual) ...
+      // Lógica de firmas existente
       if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
-         // ... tu código de siempre ...
+        final path = 'signatures/$manifestId/embarco_firma.png';
+        await _supabase.storage.from('manifests').uploadBinary(
+              path,
+              data.embarcoFirmaBytes!,
+              fileOptions: const FileOptions(upsert: true),
+            );
+        embarcoFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
       }
       if (data.recibioFirmaBytes != null && data.recibioFirmaBytes!.isNotEmpty) {
-         // ... tu código de siempre ...
+        final path = 'signatures/$manifestId/recibio_firma.png';
+        await _supabase.storage.from('manifests').uploadBinary(
+              path,
+              data.recibioFirmaBytes!,
+              fileOptions: const FileOptions(upsert: true),
+            );
+        recibioFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
       }
 
       final manifestMap = data.toMap();
       manifestMap['embarco_firma_url'] = embarcoFirmaUrl;
       manifestMap['recibio_firma_url'] = recibioFirmaUrl;
       
-      // --- GUARDAR LISTA DE FOTOS ---
+      // Guardar lista de fotos
       manifestMap['evidence_photos_urls'] = finalPhotoUrls;
 
       manifestMap.remove('pdf_url');
 
-      // ... Insert o Update igual ...
       final id = data.id;
       if (id == null) {
         manifestMap['id'] = manifestId;
@@ -82,7 +84,77 @@ class SupabaseService {
     }
   }
 
-  // --- (El resto de tu archivo sigue exactamente igual) ---
+  // --- MÉTODOS PARA EMPLEADOS (NUEVO) ---
+
+  Future<List<Employee>> getEmployees() async {
+    try {
+      final response = await _supabase
+          .from('employees')
+          .select()
+          .order('name', ascending: true);
+      return response.map((map) => Employee.fromMap(map)).toList();
+    } catch (e) {
+      print('Error al obtener empleados: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> searchEmployees(String query) async {
+    try {
+      return await _supabase
+          .from('employees')
+          .select()
+          .ilike('name', '%$query%');
+    } catch (e) {
+      print('Error buscando empleados: $e');
+      return [];
+    }
+  }
+
+  Future<void> saveEmployee(Employee employee, Uint8List? signatureBytes) async {
+    try {
+      String? signatureUrl = employee.signatureUrl;
+      
+      final employeeId = employee.id ?? _uuid.v4(); 
+
+      if (signatureBytes != null && signatureBytes.isNotEmpty) {
+        final path = 'employee_signatures/$employeeId.png';
+        
+        await _supabase.storage.from('manifests').uploadBinary(
+              path,
+              signatureBytes,
+              fileOptions: const FileOptions(upsert: true),
+            );
+            
+        signatureUrl = _supabase.storage.from('manifests').getPublicUrl(path);
+      }
+
+      final map = employee.toMap();
+      map['signature_url'] = signatureUrl;
+
+      if (employee.id == null) {
+        map['id'] = employeeId;
+        await _supabase.from('employees').insert(map);
+      } else {
+        await _supabase.from('employees').update(map).eq('id', employee.id!);
+      }
+    } catch (e) {
+      print('Error guardando empleado: $e');
+      throw Exception('Error al guardar empleado');
+    }
+  }
+
+  Future<void> deleteEmployee(String id) async {
+    try {
+      await _supabase.from('employees').delete().eq('id', id);
+    } catch (e) {
+      print('Error eliminando empleado: $e');
+      throw Exception('Error al eliminar');
+    }
+  }
+
+  // --- RESTO DE MÉTODOS (MANIFIESTOS, PDFS, CLIENTES, OPERADORES) ---
+
   Future<void> deleteManifest(String id) async {
     try {
       await _supabase.from('manifests').delete().eq('id', id);
@@ -92,11 +164,8 @@ class SupabaseService {
     }
   }
 
-  // En supabase_service.dart
-
   Future<List<ManifestData>> getManifests() async {
     try {
-      // MODIFICACIÓN: Agregamos .order para ordenar del más nuevo al más viejo
       final response = await _supabase
           .from('manifests')
           .select()
@@ -107,7 +176,6 @@ class SupabaseService {
           .toList();
       return manifests;
     } catch (e) {
-      // ignore: avoid_print
       print('Error en getManifests: $e');
       return [];
     }
