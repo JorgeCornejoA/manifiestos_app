@@ -13,7 +13,7 @@ import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart'; 
 
-// Helper class (Sin cambios)
+// Helper class
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController producto;
@@ -81,6 +81,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   List<Uint8List> _evidencePhotos = [];
   final ImagePicker _picker = ImagePicker();
+
+  // VARIABLES PARA SELECCIÓN MÚLTIPLE (MOVIDAS AQUÍ, ESTE ES SU LUGAR CORRECTO)
+  bool _isSelectionMode = false;
+  final Set<int> _selectedIndices = {};
+  final TextEditingController _bulkTextController = TextEditingController();
 
   final _formKeyStep0 = GlobalKey<FormState>();
   final _formKeyStep1 = GlobalKey<FormState>();
@@ -351,6 +356,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _embarcoSignatureController.dispose();
     _recibioSignatureController.dispose();
     _trailerLayoutControllers.forEach((_, controller) => controller.dispose());
+    // Dispose variables selección múltiple
+    _bulkTextController.dispose();
+    
     for (var section in _cargaSectionsControllers) {
       for (var controller in section) {
         controller.dispose();
@@ -1212,7 +1220,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   _embarcoFirmaUrl = null;
                 });
               },
-              // PASAMOS EL CALLBACK -> SE ACTIVA AUTOCOMPLETE
               onEmployeeSelected: (employee) {
                 setState(() {
                   _embarcoNombreController.text = employee.name;
@@ -1234,7 +1241,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   _recibioFirmaUrl = null;
                 });
               },
-              // NO PASAMOS EL CALLBACK -> SE MANTIENE MANUAL
               onEmployeeSelected: null 
           ),
         ],
@@ -1309,7 +1315,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             ],
           ),
         
-        // --- CONDICIÓN: Si hay callback, usamos Autocomplete. Si no, TextFormField ---
         if (onEmployeeSelected != null)
           Autocomplete<Employee>(
             optionsBuilder: (textEditingValue) => _searchEmployees(textEditingValue.text),
@@ -1358,9 +1363,97 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   Widget _buildTrailerDiagram() {
     return Column(
       children: [
+        // --- BARRA DE HERRAMIENTAS DE SELECCIÓN ---
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10.0),
+          child: Column(
+            children: [
+              // Fila de controles principales
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _isSelectionMode = !_isSelectionMode;
+                          _selectedIndices.clear(); // Limpiar al cambiar modo
+                          _bulkTextController.clear();
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isSelectionMode ? Colors.green : Colors.grey[300],
+                        foregroundColor: _isSelectionMode ? Colors.white : Colors.black,
+                      ),
+                      icon: Icon(_isSelectionMode ? Icons.check_box : Icons.check_box_outline_blank),
+                      label: Text(_isSelectionMode ? 'Terminar Selección' : 'Activar Selección Múltiple'),
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Herramientas visibles SOLO en modo selección
+              if (_isSelectionMode) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    // Botón Seleccionar Todo
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          if (_selectedIndices.length == 30) {
+                            _selectedIndices.clear();
+                          } else {
+                            for (int i = 0; i < 30; i++) _selectedIndices.add(i);
+                          }
+                        });
+                      },
+                      child: Text(_selectedIndices.length == 30 ? 'Deseleccionar Todo' : 'Seleccionar Todo'),
+                    ),
+                    const Spacer(),
+                    Text('${_selectedIndices.length} seleccionados', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _bulkTextController,
+                        decoration: const InputDecoration(
+                          labelText: 'Texto para aplicar',
+                          hintText: 'Ej. TOMATE',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _selectedIndices.isEmpty ? null : () {
+                        setState(() {
+                          for (int index in _selectedIndices) {
+                            _trailerLayoutControllers[index]?.text = _bulkTextController.text;
+                          }
+                          
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Texto aplicado a las casillas seleccionadas'), duration: Duration(seconds: 1)),
+                          );
+                        });
+                      },
+                      child: const Text('APLICAR'),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20, thickness: 1),
+              ],
+            ],
+          ),
+        ),
+
+        // --- EL DIAGRAMA (GRID) ---
         Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [Text('DIFUSOR'), Text('PUERTAS')]),
+        
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -1371,11 +1464,52 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               mainAxisSpacing: 4),
           itemCount: 30,
           itemBuilder: (context, index) {
+            final isSelected = _selectedIndices.contains(index);
+            final controller = _trailerLayoutControllers[index];
+
+            // Si estamos en MODO SELECCIÓN, mostramos cuadros tocables
+            if (_isSelectionMode) {
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedIndices.remove(index);
+                    } else {
+                      _selectedIndices.add(index);
+                    }
+                  });
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.green.shade100 : Colors.white,
+                    border: Border.all(
+                      color: isSelected ? Colors.green : Colors.grey,
+                      width: isSelected ? 2 : 1,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('${index + 1}', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                      if (controller!.text.isNotEmpty)
+                        Text(controller.text, 
+                          style: const TextStyle(fontWeight: FontWeight.bold, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            // Si NO estamos en modo selección, mostramos los inputs normales
             return TextFormField(
-                controller: _trailerLayoutControllers[index],
+                controller: controller,
                 decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    labelText: '${index + 1}'),
+                    labelText: '${index + 1}',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8) 
+                ),
                 textAlign: TextAlign.center);
           },
         ),

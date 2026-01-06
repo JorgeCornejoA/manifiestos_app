@@ -7,16 +7,47 @@ import 'package:manifiestos_app/features/employees/employees_screen.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  // --- MODIFICACIÓN: Función de Cerrar Sesión con Confirmación ---
   Future<void> _signOut(BuildContext context) async {
+    // 1. Mostrar el diálogo de confirmación
+    final bool? shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cerrar Sesión'),
+        content: const Text('¿Estás seguro de que deseas salir de la aplicación?'),
+        actions: [
+          // Botón Cancelar
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          // Botón Salir (En rojo para indicar acción de salida)
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.redAccent, 
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sí, Salir'),
+          ),
+        ],
+      ),
+    );
+
+    // 2. Si el usuario presionó "Cancelar" o tocó fuera, shouldLogout será null o false.
+    // Solo procedemos si es true.
+    if (shouldLogout != true) return;
+
+    // 3. Ejecutamos el cierre de sesión real
     try {
       await Supabase.instance.client.auth.signOut();
       if (context.mounted) {
         Navigator.of(context).pushReplacementNamed('/login');
       }
     } catch (e) {
-      // Manejar error
+      // Manejar error silenciosamente
     }
   }
+  // ---------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -63,16 +94,14 @@ class HomeScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               
-              // --- ENCABEZADO CORREGIDO (A prueba de Overflow) ---
+              // --- ENCABEZADO ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 1. EL LOGO (Izquierda)
-                  // Usamos Flexible para que si el logo es muy ancho, se adapte
-                  // y no empuje al botón fuera de la pantalla.
+                  // Logo (Flexible para evitar overflow)
                   Flexible(
                     child: Container(
-                      padding: const EdgeInsets.all(2), // Un pequeño margen interno
+                      padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         boxShadow: [
@@ -83,24 +112,22 @@ class HomeScreen extends StatelessWidget {
                           )
                         ]
                       ),
-                      // Alineamos a la izquierda por si el Flexible deja espacio libre
-                      alignment: Alignment.centerLeft, 
+                      alignment: Alignment.centerLeft,
                       child: Image.asset(
                         'assets/images/logo.png', 
-                        height: 50, // Reduje un poco la altura para seguridad
-                        fit: BoxFit.contain, // Asegura que se vea completo
+                        height: 50, 
+                        fit: BoxFit.contain, 
                       ),
                     ),
                   ),
                   
-                  const SizedBox(width: 15), // Espacio de seguridad entre Logo y Botón
+                  const SizedBox(width: 15),
 
-                  // 2. BOTÓN CERRAR SESIÓN (Derecha)
-                  // Este mantiene su tamaño fijo
+                  // Botón Cerrar Sesión
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => _signOut(context),
+                      onTap: () => _signOut(context), // Llama a la nueva función con alerta
                       borderRadius: BorderRadius.circular(30),
                       child: Container(
                         padding: const EdgeInsets.all(10),
@@ -121,7 +148,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              // ---------------------------------------------------
+              // ------------------
 
               const SizedBox(height: 20), 
 
@@ -215,7 +242,7 @@ class _DashboardCard extends StatelessWidget {
             }
           },
           child: Padding(
-            padding: const EdgeInsets.all(12.0), // Padding interno de la tarjeta
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -227,7 +254,7 @@ class _DashboardCard extends StatelessWidget {
                   ),
                   child: Icon(
                     item.icon,
-                    size: 36, // Icono ligeramente ajustado
+                    size: 36,
                     color: item.color,
                   ),
                 ),
