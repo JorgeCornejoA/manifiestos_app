@@ -13,7 +13,7 @@ import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart'; 
 
-// Helper class
+// Helper class (Sin cambios)
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController producto;
@@ -82,10 +82,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   List<Uint8List> _evidencePhotos = [];
   final ImagePicker _picker = ImagePicker();
 
-  // VARIABLES PARA SELECCIÓN MÚLTIPLE (MOVIDAS AQUÍ, ESTE ES SU LUGAR CORRECTO)
+  // VARIABLES PARA SELECCIÓN MÚLTIPLE
   bool _isSelectionMode = false;
   final Set<int> _selectedIndices = {};
   final TextEditingController _bulkTextController = TextEditingController();
+
+  // VARIABLE PARA TIPO DE MANIFIESTO (Trailer vs Entrada)
+  // 'T' = Trailer, 'EA' = Entrada Almacén
+  String _selectedTipo = 'T'; 
 
   final _formKeyStep0 = GlobalKey<FormState>();
   final _formKeyStep1 = GlobalKey<FormState>();
@@ -94,14 +98,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   final _trailerNoController = TextEditingController();
   final _productorController = TextEditingController();
-  final _certificadoOrigenController = TextEditingController();
-  final _guiaFitosanitariaController = TextEditingController();
   final _fechaController = TextEditingController();
+  
   final _consignadoAController = TextEditingController();
-  final _facturaController = TextEditingController();
   final _domicilioController = TextEditingController();
   final _ciudadController = TextEditingController();
   final _condicionesController = TextEditingController();
+  
   final _operadorController = TextEditingController();
   final _trailerController = TextEditingController();
   final _placasController = TextEditingController();
@@ -110,8 +113,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _telController = TextEditingController();
   final _importeFleteController = TextEditingController();
   final _anticipoFleteController = TextEditingController();
-  final _cartaPorteNoController = TextEditingController();
-  final _ctaChequesTransportistaController = TextEditingController();
+  
   final _observacionesController = TextEditingController();
   final _embarcoNombreController = TextEditingController();
   final _recibioNombreController = TextEditingController();
@@ -169,7 +171,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Lógica Carga (MULTISECCIÓN) ---
+  // --- Lógica Carga ---
   void _addNewSection() {
     setState(() {
       _cargaSectionsControllers.add([]); 
@@ -253,13 +255,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
 
   void _loadManifestData(ManifestData manifest) async { 
+    // Cargar el tipo seleccionado
+    _selectedTipo = manifest.tipo;
+    
     _trailerNoController.text = manifest.trailerNo;
     _productorController.text = manifest.productor;
-    _certificadoOrigenController.text = manifest.certificadoOrigen;
-    _guiaFitosanitariaController.text = manifest.guiaFitosanitaria;
     _fechaController.text = manifest.fecha;
     _consignadoAController.text = manifest.consignadoA;
-    _facturaController.text = manifest.factura;
     _domicilioController.text = manifest.domicilio;
     _ciudadController.text = manifest.ciudad;
     _condicionesController.text = manifest.condiciones;
@@ -271,8 +273,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _telController.text = manifest.tel;
     _importeFleteController.text = manifest.importeFlete.toString();
     _anticipoFleteController.text = manifest.anticipoFlete.toString();
-    _cartaPorteNoController.text = manifest.cartaPorteNo;
-    _ctaChequesTransportistaController.text = manifest.ctaChequesTransportista;
     _observacionesController.text = manifest.observaciones;
     _embarcoNombreController.text = manifest.embarcoNombre;
     _recibioNombreController.text = manifest.recibioNombre;
@@ -332,11 +332,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   void dispose() {
     _trailerNoController.dispose();
     _productorController.dispose();
-    _certificadoOrigenController.dispose();
-    _guiaFitosanitariaController.dispose();
     _fechaController.dispose();
     _consignadoAController.dispose();
-    _facturaController.dispose();
     _domicilioController.dispose();
     _ciudadController.dispose();
     _condicionesController.dispose();
@@ -348,17 +345,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _telController.dispose();
     _importeFleteController.dispose();
     _anticipoFleteController.dispose();
-    _cartaPorteNoController.dispose();
-    _ctaChequesTransportistaController.dispose();
     _observacionesController.dispose();
     _embarcoNombreController.dispose();
     _recibioNombreController.dispose();
     _embarcoSignatureController.dispose();
     _recibioSignatureController.dispose();
     _trailerLayoutControllers.forEach((_, controller) => controller.dispose());
-    // Dispose variables selección múltiple
     _bulkTextController.dispose();
-    
     for (var section in _cargaSectionsControllers) {
       for (var controller in section) {
         controller.dispose();
@@ -579,13 +572,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
+        tipo: _selectedTipo, // GUARDAMOS EL TIPO
         trailerNo: _trailerNoController.text,
         productor: _productorController.text,
-        certificadoOrigen: _certificadoOrigenController.text,
-        guiaFitosanitaria: _guiaFitosanitariaController.text,
         fecha: _fechaController.text,
         consignadoA: _consignadoAController.text,
-        factura: _facturaController.text,
         domicilio: _domicilioController.text,
         ciudad: _ciudadController.text,
         condiciones: _condicionesController.text,
@@ -597,8 +588,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         tel: _telController.text,
         importeFlete: int.tryParse(_importeFleteController.text) ?? 0,
         anticipoFlete: int.tryParse(_anticipoFleteController.text) ?? 0,
-        cartaPorteNo: _cartaPorteNoController.text,
-        ctaChequesTransportista: _ctaChequesTransportistaController.text,
         carga: cargaCompleta, 
         observaciones: _observacionesController.text,
         embarcoNombre: _embarcoNombreController.text,
@@ -619,13 +608,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final dataForPdf = ManifestData(
         id: manifestId,
+        tipo: dataForBd.tipo, // PASAMOS EL TIPO AL PDF
         trailerNo: dataForBd.trailerNo,
         productor: dataForBd.productor,
-        certificadoOrigen: dataForBd.certificadoOrigen,
-        guiaFitosanitaria: dataForBd.guiaFitosanitaria,
         fecha: dataForBd.fecha,
         consignadoA: dataForBd.consignadoA,
-        factura: dataForBd.factura,
         domicilio: dataForBd.domicilio,
         ciudad: dataForBd.ciudad,
         condiciones: dataForBd.condiciones,
@@ -637,8 +624,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         tel: dataForBd.tel,
         importeFlete: dataForBd.importeFlete,
         anticipoFlete: dataForBd.anticipoFlete,
-        cartaPorteNo: dataForBd.cartaPorteNo,
-        ctaChequesTransportista: dataForBd.ctaChequesTransportista,
         carga: dataForBd.carga,
         observaciones: dataForBd.observaciones,
         embarcoNombre: dataForBd.embarcoNombre,
@@ -754,32 +739,67 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               content: Form(
                 key: _formKeyStep0,
                 child: Column(children: [
-                  TextFormField(
-                    controller: _trailerNoController,
-                    decoration: const InputDecoration(labelText: 'TRAILER No.'),
-                    textInputAction: TextInputAction.next,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                  // --- SELECCIÓN DE TIPO ---
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 15.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("Tipo:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 10),
+                        ToggleButtons(
+                          isSelected: [_selectedTipo == 'T', _selectedTipo == 'EA'],
+                          onPressed: (index) {
+                            setState(() {
+                              _selectedTipo = index == 0 ? 'T' : 'EA';
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          selectedColor: Colors.white,
+                          fillColor: Colors.green,
+                          constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
+                          children: const [
+                            Text("Trailer"),
+                            Text("Entrada Alm."),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
+                  
+                  // --- CAMPOS RESTANTES ---
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _trailerNoController,
+                          // La etiqueta cambia según lo seleccionado
+                          decoration: InputDecoration(
+                            labelText: _selectedTipo == 'T' ? 'TRAILER No.' : 'ENTRADA ALMACÉN No.',
+                            hintText: '12345',
+                          ),
+                          textInputAction: TextInputAction.next,
+                          validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _fechaController,
+                          decoration: const InputDecoration(
+                              labelText: 'FECHA', suffixIcon: Icon(Icons.calendar_today)),
+                          readOnly: true,
+                          onTap: _selectDate,
+                          validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   TextFormField(
                     controller: _productorController,
                     decoration: const InputDecoration(labelText: 'PRODUCTOR'),
                     textInputAction: TextInputAction.next,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
-                  ),
-                  TextFormField(
-                      controller: _certificadoOrigenController,
-                      decoration: const InputDecoration(labelText: 'CERTIFICADO DE ORIGEN'),
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _guiaFitosanitariaController,
-                      decoration: const InputDecoration(labelText: 'GUÍA FITOSANITARIA'),
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                    controller: _fechaController,
-                    decoration: const InputDecoration(
-                        labelText: 'FECHA', suffixIcon: Icon(Icons.calendar_today)),
-                    readOnly: true,
-                    onTap: _selectDate,
                     validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
                   ),
                 ]),
@@ -828,24 +848,31 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       );
                     },
                   ),
-                  TextFormField(
-                      controller: _facturaController,
-                      decoration: const InputDecoration(labelText: 'FACTURA'),
-                      textInputAction: TextInputAction.next),
+                  const SizedBox(height: 10),
                   TextFormField(
                       controller: _domicilioController,
                       decoration: const InputDecoration(labelText: 'DOMICILIO'),
                       readOnly: _domicilioController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
                       textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _ciudadController,
-                      decoration: const InputDecoration(labelText: 'CIUDAD'),
-                      readOnly: _ciudadController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _condicionesController,
-                      decoration: const InputDecoration(labelText: 'CONDICIONES'),
-                      textInputAction: TextInputAction.done),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                            controller: _ciudadController,
+                            decoration: const InputDecoration(labelText: 'CIUDAD'),
+                            readOnly: _ciudadController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
+                            textInputAction: TextInputAction.next),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                            controller: _condicionesController,
+                            decoration: const InputDecoration(labelText: 'CONDICIONES'),
+                            textInputAction: TextInputAction.done),
+                      ),
+                    ],
+                  ),
                 ]),
               ),
               isActive: _currentStep >= 1,
@@ -899,49 +926,77 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       );
                     },
                   ),
-                  TextFormField(
-                      controller: _trailerController,
-                      decoration: const InputDecoration(labelText: 'TRAILER'),
-                      readOnly: _trailerController.text.isNotEmpty && _operadorController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _placasController,
-                      decoration: const InputDecoration(labelText: 'PLACAS'),
-                      readOnly: _placasController.text.isNotEmpty && _operadorController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _cajaController,
-                      decoration: const InputDecoration(labelText: 'CAJA'),
-                      readOnly: _cajaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _lineaTransportistaController,
-                      decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
-                      readOnly: _lineaTransportistaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _telController,
-                      decoration: const InputDecoration(labelText: 'TEL. (INCLUIR LADA)'),
-                      readOnly: _telController.text.isNotEmpty && _operadorController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _importeFleteController,
-                      decoration: const InputDecoration(labelText: 'IMPORTE DEL FLETE'),
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _anticipoFleteController,
-                      decoration: const InputDecoration(labelText: 'ANTICIPO DEL FLETE'),
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _cartaPorteNoController,
-                      decoration: const InputDecoration(labelText: 'CARTA PORTE No.'),
-                      textInputAction: TextInputAction.next),
-                  TextFormField(
-                      controller: _ctaChequesTransportistaController,
-                      decoration: const InputDecoration(labelText: 'No. CTA CHEQUES TRANSPORTISTA'),
-                      textInputAction: TextInputAction.done),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                            controller: _trailerController,
+                            decoration: const InputDecoration(labelText: 'TRAILER'),
+                            readOnly: _trailerController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            textInputAction: TextInputAction.next),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                            controller: _placasController,
+                            decoration: const InputDecoration(labelText: 'PLACAS'),
+                            readOnly: _placasController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            textInputAction: TextInputAction.next),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                            controller: _cajaController,
+                            decoration: const InputDecoration(labelText: 'CAJA'),
+                            readOnly: _cajaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            textInputAction: TextInputAction.next),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                            controller: _lineaTransportistaController,
+                            decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
+                            readOnly: _lineaTransportistaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            textInputAction: TextInputAction.next),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                            controller: _telController,
+                            decoration: const InputDecoration(labelText: 'TEL.'),
+                            readOnly: _telController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            textInputAction: TextInputAction.next),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                            controller: _importeFleteController,
+                            decoration: const InputDecoration(labelText: 'IMPORTE DEL FLETE'),
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                            controller: _anticipoFleteController,
+                            decoration: const InputDecoration(labelText: 'ANTICIPO DEL FLETE'),
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next),
+                      ),
+                    ],
+                  ),
                 ])),
               ),
               isActive: _currentStep >= 2,
@@ -1220,6 +1275,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   _embarcoFirmaUrl = null;
                 });
               },
+              // PASAMOS EL CALLBACK -> SE ACTIVA AUTOCOMPLETE
               onEmployeeSelected: (employee) {
                 setState(() {
                   _embarcoNombreController.text = employee.name;
@@ -1241,6 +1297,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   _recibioFirmaUrl = null;
                 });
               },
+              // NO PASAMOS EL CALLBACK -> SE MANTIENE MANUAL
               onEmployeeSelected: null 
           ),
         ],
@@ -1315,6 +1372,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             ],
           ),
         
+        // --- CONDICIÓN: Si hay callback, usamos Autocomplete. Si no, TextFormField ---
         if (onEmployeeSelected != null)
           Autocomplete<Employee>(
             optionsBuilder: (textEditingValue) => _searchEmployees(textEditingValue.text),
@@ -1508,7 +1566,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     labelText: '${index + 1}',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8) 
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8) // Ajuste para que se vea mejor
                 ),
                 textAlign: TextAlign.center);
           },
