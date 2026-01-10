@@ -3,6 +3,7 @@ import 'package:flutter/services.dart'; // <--- 1. IMPORTANTE: Agrega esta libre
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:manifiestos_app/features/clients/clients_screen.dart';
 import 'package:manifiestos_app/features/manifest/manifest_form_screen.dart';
+import 'package:manifiestos_app/features/producers/producers_screen.dart';
 import 'package:manifiestos_app/features/manifest/manifests_list_screen.dart';
 import 'package:manifiestos_app/screens/home_screen.dart';
 import 'package:manifiestos_app/screens/login_screen.dart';
@@ -13,6 +14,7 @@ import 'package:manifiestos_app/features/operators/operator_form_screen.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/features/clients/client_form_screen.dart';
 import 'package:manifiestos_app/models/client.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -125,6 +127,8 @@ class MyApp extends StatelessWidget {
         '/manifest-form': (context) => const ManifestFormScreen(),
         '/clients': (context) => const ClientsScreen(),
         
+        '/producers': (context) => const ProducersScreen(),
+
         '/client-form': (context) {
           final client = ModalRoute.of(context)!.settings.arguments as Client?;
           return ClientFormScreen(client: client);

@@ -65,6 +65,12 @@ class HomeScreen extends StatelessWidget {
         route: '/manifests-list',
       ),
       _MenuItem(
+        title: 'Productores',
+        icon: Icons.agriculture,
+        color: const Color(0xFF558B2F),
+        route: '/producers',
+      ),
+      _MenuItem(
         title: 'Clientes',
         icon: Icons.business,
         color: const Color(0xFF558B2F),

@@ -11,7 +11,9 @@ import 'package:intl/intl.dart';
 
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
-import 'package:manifiestos_app/models/employee.dart'; 
+import 'package:manifiestos_app/models/employee.dart';
+// IMPORTAR EL MODELO PRODUCER
+import 'package:manifiestos_app/models/producer.dart';
 
 // Helper class (Sin cambios)
 class _CargaItemControllers {
@@ -87,8 +89,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final Set<int> _selectedIndices = {};
   final TextEditingController _bulkTextController = TextEditingController();
 
-  // VARIABLE PARA TIPO DE MANIFIESTO (Trailer vs Entrada)
-  // 'T' = Trailer, 'EA' = Entrada Almacén
+  // VARIABLE PARA TIPO
   String _selectedTipo = 'T'; 
 
   final _formKeyStep0 = GlobalKey<FormState>();
@@ -97,7 +98,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _formKeyStep4 = GlobalKey<FormState>();
 
   final _trailerNoController = TextEditingController();
-  final _productorController = TextEditingController();
+  
+  // CAMBIO: Lista de controladores para múltiples productores
+  List<TextEditingController> _producerControllers = []; 
+
   final _fechaController = TextEditingController();
   
   final _consignadoAController = TextEditingController();
@@ -140,7 +144,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     } else {
       _fechaController.text = _formatDate(DateTime.now());
       setState(() {
-        _addNewSection(); 
+        // Inicializamos con 1 productor y 1 sección
+        _addProducerSection(); 
       });
     }
   }
@@ -171,20 +176,26 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Lógica Carga ---
-  void _addNewSection() {
+  // --- Lógica Productores y Carga ---
+  // Esta función agrega TANTO el campo de productor COMO la tabla de carga
+  void _addProducerSection() {
     setState(() {
+      _producerControllers.add(TextEditingController());
       _cargaSectionsControllers.add([]); 
-      _addItemToSection(_cargaSectionsControllers.length - 1); 
+      _addItemToSection(_cargaSectionsControllers.length - 1);
     });
   }
 
-  void _removeSection(int sectionIndex) {
+  void _removeProducerSection(int index) {
     setState(() {
-      for (var controller in _cargaSectionsControllers[sectionIndex]) {
+      _producerControllers[index].dispose();
+      _producerControllers.removeAt(index);
+      
+      // Limpiar controladores de carga de esa sección
+      for (var controller in _cargaSectionsControllers[index]) {
         controller.dispose();
       }
-      _cargaSectionsControllers.removeAt(sectionIndex);
+      _cargaSectionsControllers.removeAt(index);
       _calculateTotals();
     });
   }
@@ -194,6 +205,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     newControllers.pallets.addListener(_calculateTotals);
     newControllers.cajasPorPallet.addListener(_calculateTotals);
     setState(() {
+      // Seguridad por si el índice no existe
+      while (_cargaSectionsControllers.length <= sectionIndex) {
+        _cargaSectionsControllers.add([]);
+      }
       _cargaSectionsControllers[sectionIndex].add(newControllers);
     });
   }
@@ -255,11 +270,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
 
   void _loadManifestData(ManifestData manifest) async { 
-    // Cargar el tipo seleccionado
     _selectedTipo = manifest.tipo;
     
     _trailerNoController.text = manifest.trailerNo;
-    _productorController.text = manifest.productor;
+    // Productor ya no se usa aquí, se carga abajo en la lista dinámica
     _fechaController.text = manifest.fecha;
     _consignadoAController.text = manifest.consignadoA;
     _domicilioController.text = manifest.domicilio;
@@ -295,14 +309,41 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
     if (mounted) {
       setState(() {
+        // Limpiar todo antes de cargar
+        for (var controller in _producerControllers) controller.dispose();
+        _producerControllers.clear();
         for (var section in _cargaSectionsControllers) {
-          for (var controller in section) {
-            controller.dispose();
-          }
+          for (var controller in section) controller.dispose();
         }
         _cargaSectionsControllers.clear();
 
+        // 1. CARGAR PRODUCTORES
+        List<String> producersList = manifest.sectionProducers;
+        // Compatibilidad: si la lista está vacía, usamos el string simple
+        if (producersList.isEmpty && manifest.productor.isNotEmpty) {
+           producersList = [manifest.productor];
+        } else if (producersList.isEmpty) {
+           producersList = ['']; // Al menos uno vacío
+        }
+
+        for (String pName in producersList) {
+          _producerControllers.add(TextEditingController(text: pName));
+        }
+
+        // 2. CARGAR SECCIONES DE CARGA
+        // Ajustamos la cantidad de secciones de carga para que coincida con los productores
+        // (Aunque debería coincidir desde el modelo)
+        while (_cargaSectionsControllers.length < producersList.length) {
+           _cargaSectionsControllers.add([]);
+        }
+
+        int sectionIndex = 0;
         for (var sectionData in manifest.carga) {
+          // Si hay más datos de carga que productores, agregamos espacio (edge case)
+          if (sectionIndex >= _cargaSectionsControllers.length) {
+             _cargaSectionsControllers.add([]);
+          }
+          
           List<_CargaItemControllers> sectionControllers = [];
           for (var item in sectionData) {
             final newControllers = _CargaItemControllers(item);
@@ -310,11 +351,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             newControllers.cajasPorPallet.addListener(_calculateTotals);
             sectionControllers.add(newControllers);
           }
-          _cargaSectionsControllers.add(sectionControllers);
+          // Reemplazamos la lista vacía con la cargada
+          _cargaSectionsControllers[sectionIndex] = sectionControllers;
+          sectionIndex++;
         }
 
-        if (_cargaSectionsControllers.isEmpty) {
-          _addNewSection();
+        // Si no hay carga ni productores, inicializar vacío
+        if (_producerControllers.isEmpty) {
+          _addProducerSection();
         }
 
         for (final entry in manifest.trailerLayout.entries) {
@@ -331,7 +375,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   @override
   void dispose() {
     _trailerNoController.dispose();
-    _productorController.dispose();
+    // Productor controllers
+    for (var c in _producerControllers) c.dispose();
+    
     _fechaController.dispose();
     _consignadoAController.dispose();
     _domicilioController.dispose();
@@ -425,11 +471,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   bool _validateAllSteps() {
     if (_trailerNoController.text.isEmpty ||
-        _productorController.text.isEmpty ||
         _fechaController.text.isEmpty) {
-      _showErrorSnackbar('Error en "Info General": Faltan campos obligatorios.');
+      _showErrorSnackbar('Error en "Info General": Faltan campos.');
       return false;
     }
+    // Validar que al menos un productor tenga nombre
+    if (_producerControllers.isEmpty || _producerControllers.any((c) => c.text.isEmpty)) {
+       _showErrorSnackbar('Error en "Info General": Falta nombre del productor.');
+       return false;
+    }
+
     if (_consignadoAController.text.isEmpty) {
       _showErrorSnackbar('Error en "Destino": Falta "Consignado A".');
       return false;
@@ -439,19 +490,19 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       return false;
     }
     if (_cargaSectionsControllers.isEmpty) {
-      _showErrorSnackbar('Error en "Carga": Debe añadir al menos una sección de carga.');
+      _showErrorSnackbar('Error en "Carga": Debe haber carga.');
       return false;
     }
     for (int i = 0; i < _cargaSectionsControllers.length; i++) {
       if (_cargaSectionsControllers[i].isEmpty) {
-        _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): La sección está vacía.');
+        _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): Vacía.');
         return false;
       }
       for (var controller in _cargaSectionsControllers[i]) {
         if (controller.producto.text.isEmpty ||
             (int.tryParse(controller.pallets.text) ?? 0) <= 0 ||
             (int.tryParse(controller.cajasPorPallet.text) ?? 0) <= 0) {
-          _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): Datos inválidos en productos.');
+          _showErrorSnackbar('Error en "Carga": Datos inválidos.');
           return false;
         }
       }
@@ -465,7 +516,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     bool recibioValid = _recibioSignatureController.isNotEmpty || (_recibioFirmaUrl != null && _recibioFirmaUrl!.isNotEmpty);
 
     if (!embarcoValid || !recibioValid) {
-      _showErrorSnackbar('Error en "Firmas": Faltan las firmas gráficas.');
+      _showErrorSnackbar('Error en "Firmas": Faltan las firmas.');
       return false;
     }
     bool isDiagramValid = _trailerLayoutControllers.values.any((c) => c.text.isNotEmpty);
@@ -570,11 +621,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         }).toList();
       }).toList();
 
+      // Recopilar nombres de productores
+      List<String> producerNames = _producerControllers.map((c) => c.text).toList();
+      String mainProductorString = producerNames.join(" / "); // Para busqueda simple
+
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
-        tipo: _selectedTipo, // GUARDAMOS EL TIPO
+        tipo: _selectedTipo, 
         trailerNo: _trailerNoController.text,
-        productor: _productorController.text,
+        productor: mainProductorString, // Legacy
         fecha: _fechaController.text,
         consignadoA: _consignadoAController.text,
         domicilio: _domicilioController.text,
@@ -588,7 +643,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         tel: _telController.text,
         importeFlete: int.tryParse(_importeFleteController.text) ?? 0,
         anticipoFlete: int.tryParse(_anticipoFleteController.text) ?? 0,
-        carga: cargaCompleta, 
+        carga: cargaCompleta,
+        sectionProducers: producerNames, // <--- LISTA REAL
         observaciones: _observacionesController.text,
         embarcoNombre: _embarcoNombreController.text,
         recibioNombre: _recibioNombreController.text,
@@ -608,7 +664,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       final dataForPdf = ManifestData(
         id: manifestId,
-        tipo: dataForBd.tipo, // PASAMOS EL TIPO AL PDF
+        tipo: dataForBd.tipo,
         trailerNo: dataForBd.trailerNo,
         productor: dataForBd.productor,
         fecha: dataForBd.fecha,
@@ -625,6 +681,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         importeFlete: dataForBd.importeFlete,
         anticipoFlete: dataForBd.anticipoFlete,
         carga: dataForBd.carga,
+        sectionProducers: dataForBd.sectionProducers, // PASAR AL PDF
         observaciones: dataForBd.observaciones,
         embarcoNombre: dataForBd.embarcoNombre,
         recibioNombre: dataForBd.recibioNombre,
@@ -767,13 +824,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     ),
                   ),
                   
-                  // --- CAMPOS RESTANTES ---
+                  // --- TRAILER Y FECHA ---
                   Row(
                     children: [
                       Expanded(
                         child: TextFormField(
                           controller: _trailerNoController,
-                          // La etiqueta cambia según lo seleccionado
                           decoration: InputDecoration(
                             labelText: _selectedTipo == 'T' ? 'TRAILER No.' : 'ENTRADA ALMACÉN No.',
                             hintText: '12345',
@@ -795,12 +851,64 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
+                  
+                  // --- PRODUCTORES DINÁMICOS ---
+                  const Align(
+                    alignment: Alignment.centerLeft, 
+                    child: Text("Productores", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
+                  ),
                   const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _productorController,
-                    decoration: const InputDecoration(labelText: 'PRODUCTOR'),
-                    textInputAction: TextInputAction.next,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                  
+                  ...List.generate(_producerControllers.length, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Autocomplete<Producer>(
+                              optionsBuilder: (textEditingValue) async {
+                                if (textEditingValue.text.isEmpty) return const Iterable.empty();
+                                final data = await _supabaseService.searchProducers(textEditingValue.text);
+                                return data.map((e) => Producer.fromMap(e));
+                              },
+                              displayStringForOption: (option) => option.name,
+                              onSelected: (selection) {
+                                _producerControllers[index].text = selection.name;
+                              },
+                              fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                                // Sincronizar controlador
+                                if (controller.text != _producerControllers[index].text) {
+                                  controller.text = _producerControllers[index].text;
+                                }
+                                return TextFormField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: InputDecoration(
+                                    labelText: 'PRODUCTOR ${index + 1}',
+                                    suffixIcon: const Icon(Icons.search),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onChanged: (val) => _producerControllers[index].text = val,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                                );
+                              },
+                            ),
+                          ),
+                          if (_producerControllers.length > 1)
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle, color: Colors.red),
+                              onPressed: () => _removeProducerSection(index),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                  TextButton.icon(
+                    icon: const Icon(Icons.add_circle),
+                    label: const Text("Agregar otro Productor"),
+                    onPressed: _addProducerSection,
                   ),
                 ]),
               ),
@@ -1093,14 +1201,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Carga ${sectionIndex + 1}', 
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                if (_cargaSectionsControllers.length > 1)
-                  TextButton.icon(
-                    icon: const Icon(Icons.delete_sweep, color: Colors.red),
-                    label: const Text('Borrar Sección', style: TextStyle(color: Colors.red)),
-                    onPressed: () => _removeSection(sectionIndex),
+                // MOSTRAR NOMBRE DEL PRODUCTOR EN EL ENCABEZADO DE LA SECCIÓN
+                Flexible(
+                  child: Text(
+                    'Carga: ${_producerControllers.length > sectionIndex ? _producerControllers[sectionIndex].text : "Productor ${sectionIndex + 1}"}', 
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey),
                   ),
+                ),
               ],
             ),
           ),
@@ -1225,33 +1332,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         ],
 
         const SizedBox(height: 20),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.library_add),
-          label: const Text('AÑADIR OTRA CARGA (Nueva Tabla)'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50, foregroundColor: Colors.blue),
-          onPressed: _addNewSection,
-        ),
-
-        const Divider(height: 32),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              const Text('GRAN TOTAL: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              SizedBox(
-                  width: 80,
-                  child: Text('$_totalPallets p.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-              SizedBox(
-                  width: 80,
-                  child: Text('$_totalCajas',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-            ],
-          ),
-        )
+        // BOTON ELIMINADO: Ya no se agrega tabla manual, se hace agregando Productor
       ],
     );
   }
@@ -1275,7 +1356,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   _embarcoFirmaUrl = null;
                 });
               },
-              // PASAMOS EL CALLBACK -> SE ACTIVA AUTOCOMPLETE
               onEmployeeSelected: (employee) {
                 setState(() {
                   _embarcoNombreController.text = employee.name;
@@ -1297,7 +1377,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   _recibioFirmaUrl = null;
                 });
               },
-              // NO PASAMOS EL CALLBACK -> SE MANTIENE MANUAL
               onEmployeeSelected: null 
           ),
         ],
@@ -1372,7 +1451,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             ],
           ),
         
-        // --- CONDICIÓN: Si hay callback, usamos Autocomplete. Si no, TextFormField ---
         if (onEmployeeSelected != null)
           Autocomplete<Employee>(
             optionsBuilder: (textEditingValue) => _searchEmployees(textEditingValue.text),

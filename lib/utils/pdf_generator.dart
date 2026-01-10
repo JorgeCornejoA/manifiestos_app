@@ -38,11 +38,18 @@ class PdfGenerator {
                       children: [
                         _buildInfoSection(context, data),
                         
-                        // Tablas de carga
-                        ...data.carga.map((seccion) {
+                        // Tablas de carga con Nombre de Productor
+                        ...data.carga.asMap().entries.map((entry) {
+                           int index = entry.key;
+                           List<CargaItem> seccion = entry.value;
+                           String productorName = "";
+                           if (index < data.sectionProducers.length) {
+                             productorName = data.sectionProducers[index];
+                           }
+
                            return pw.Padding(
                              padding: const pw.EdgeInsets.only(top: 5),
-                             child: _buildCargaTable(context, seccion)
+                             child: _buildCargaTable(context, seccion, productorName)
                            );
                         }),
 
@@ -245,7 +252,8 @@ class PdfGenerator {
     );
   }
 
-  static pw.Widget _buildCargaTable(pw.Context context, List<CargaItem> carga) {
+  // --- MODIFICADO: Acepta nombre del productor
+  static pw.Widget _buildCargaTable(pw.Context context, List<CargaItem> carga, String productorName) {
     // Fuentes más grandes
     final headerTextStyle = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
 
@@ -260,7 +268,8 @@ class PdfGenerator {
           padding: const pw.EdgeInsets.all(1),
           alignment: pw.Alignment.center,
           color: PdfColors.lightBlue800,
-          child: pw.Text("DATOS DE LA CARGA", style: headerTextStyle),
+          // MUESTRA EL NOMBRE AQUÍ
+          child: pw.Text("DATOS DE LA CARGA - ${productorName.toUpperCase()}", style: headerTextStyle),
         ),
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),

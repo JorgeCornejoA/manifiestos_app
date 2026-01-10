@@ -3,7 +3,7 @@ import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
-import 'package:manifiestos_app/models/employee.dart'; // <--- ESTE ES EL QUE FALTABA
+import 'package:manifiestos_app/models/employee.dart';
 import 'package:uuid/uuid.dart';
 
 class SupabaseService {
@@ -21,10 +21,7 @@ class SupabaseService {
       List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
 
       if (data.evidencePhotosBytes != null && data.evidencePhotosBytes!.isNotEmpty) {
-        
-        // Limpiamos para reconstruir la lista con las fotos actuales
         finalPhotoUrls.clear(); 
-        
         for (int i = 0; i < data.evidencePhotosBytes!.length; i++) {
           final bytes = data.evidencePhotosBytes![i];
           final uniqueName = '${_uuid.v4()}.png'; 
@@ -41,7 +38,6 @@ class SupabaseService {
         }
       }
 
-      // Lógica de firmas existente
       if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
         final path = 'signatures/$manifestId/embarco_firma.png';
         await _supabase.storage.from('manifests').uploadBinary(
@@ -65,7 +61,6 @@ class SupabaseService {
       manifestMap['embarco_firma_url'] = embarcoFirmaUrl;
       manifestMap['recibio_firma_url'] = recibioFirmaUrl;
       
-      // Guardar lista de fotos
       manifestMap['evidence_photos_urls'] = finalPhotoUrls;
 
       manifestMap.remove('pdf_url');
@@ -84,7 +79,34 @@ class SupabaseService {
     }
   }
 
-  // --- MÉTODOS PARA EMPLEADOS (NUEVO) ---
+  // --- MÉTODOS PARA PRODUCTORES (NUEVO) ---
+  Future<List<Map<String, dynamic>>> searchProducers(String query) async {
+    final response = await _supabase
+        .from('producers')
+        .select()
+        .ilike('name', '%$query%')
+        .limit(10);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> saveProducer(String name) async {
+    // Evitar duplicados
+    final existing = await _supabase.from('producers').select().eq('name', name).maybeSingle();
+    if (existing == null) {
+      await _supabase.from('producers').insert({'name': name});
+    }
+  }
+  
+  Future<List<Map<String, dynamic>>> getProducers() async {
+    final response = await _supabase.from('producers').select().order('name', ascending: true);
+    return List<Map<String, dynamic>>.from(response);
+  }
+  
+  Future<void> deleteProducer(int id) async {
+    await _supabase.from('producers').delete().eq('id', id);
+  }
+
+  // --- MÉTODOS PARA EMPLEADOS ---
 
   Future<List<Employee>> getEmployees() async {
     try {
@@ -114,18 +136,15 @@ class SupabaseService {
   Future<void> saveEmployee(Employee employee, Uint8List? signatureBytes) async {
     try {
       String? signatureUrl = employee.signatureUrl;
-      
       final employeeId = employee.id ?? _uuid.v4(); 
 
       if (signatureBytes != null && signatureBytes.isNotEmpty) {
         final path = 'employee_signatures/$employeeId.png';
-        
         await _supabase.storage.from('manifests').uploadBinary(
               path,
               signatureBytes,
               fileOptions: const FileOptions(upsert: true),
             );
-            
         signatureUrl = _supabase.storage.from('manifests').getPublicUrl(path);
       }
 
@@ -153,7 +172,7 @@ class SupabaseService {
     }
   }
 
-  // --- RESTO DE MÉTODOS (MANIFIESTOS, PDFS, CLIENTES, OPERADORES) ---
+  // --- RESTO DE MÉTODOS ---
 
   Future<void> deleteManifest(String id) async {
     try {

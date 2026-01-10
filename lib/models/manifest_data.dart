@@ -2,9 +2,9 @@ import 'dart:typed_data';
 
 class ManifestData {
   final String? id;
-  final String tipo; // NUEVO CAMPO: 'T' o 'EA'
+  final String tipo; 
   final String trailerNo;
-  final String productor;
+  final String productor; // Se mantiene como resumen (ej: "Prod A / Prod B")
   final String fecha;
   final String consignadoA;
   final String domicilio;
@@ -20,6 +20,7 @@ class ManifestData {
   final int anticipoFlete;
   
   final List<List<CargaItem>> carga; 
+  final List<String> sectionProducers; // <--- NUEVO: Lista de productores por sección
   
   final String observaciones;
   final String embarcoNombre;
@@ -40,7 +41,7 @@ class ManifestData {
 
   ManifestData({
     this.id,
-    this.tipo = 'T', // Valor por defecto: Trailer
+    this.tipo = 'T',
     required this.trailerNo,
     required this.productor,
     required this.fecha,
@@ -57,6 +58,7 @@ class ManifestData {
     this.importeFlete = 0,
     this.anticipoFlete = 0,
     required this.carga,
+    List<String>? sectionProducers, // Opcional en el constructor
     this.observaciones = '',
     required this.embarcoNombre,
     required this.recibioNombre,
@@ -68,12 +70,14 @@ class ManifestData {
     this.evidencePhotosUrls,
     this.evidencePhotosBytes,
     this.pdfUrl,
-  });
+  }) : 
+    // Si no se pasa lista, la creamos vacía basada en la cantidad de cargas
+    sectionProducers = sectionProducers ?? List.filled(carga.length, '');
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'tipo': tipo, // Guardamos el tipo
+      'tipo': tipo,
       'trailer_no': trailerNo,
       'productor': productor,
       'fecha': fecha,
@@ -90,6 +94,7 @@ class ManifestData {
       'importe_flete': importeFlete,
       'anticipo_flete': anticipoFlete,
       'carga': carga.map((section) => section.map((item) => item.toMap()).toList()).toList(),
+      'section_producers': sectionProducers, // <--- Guardamos la lista
       'observaciones': observaciones,
       'embarco_nombre': embarcoNombre,
       'recibio_nombre': recibioNombre,
@@ -118,9 +123,22 @@ class ManifestData {
       }
     }
 
+    // Recuperar lista de productores
+    List<String> parsedProducers = [];
+    if (map['section_producers'] != null) {
+      parsedProducers = List<String>.from(map['section_producers']);
+    } else {
+      // Compatibilidad con manifiestos viejos: Usar el campo 'productor' único
+      if (parsedCarga.isNotEmpty) {
+        parsedProducers.add(map['productor'] ?? '');
+        // Rellenar resto si hay mas secciones
+        for (int i = 1; i < parsedCarga.length; i++) parsedProducers.add('');
+      }
+    }
+
     return ManifestData(
       id: map['id'],
-      tipo: map['tipo'] ?? 'T', // Recuperamos el tipo (default T)
+      tipo: map['tipo'] ?? 'T',
       trailerNo: map['trailer_no'] ?? '',
       productor: map['productor'] ?? '',
       fecha: map['fecha'] ?? '',
@@ -137,6 +155,7 @@ class ManifestData {
       importeFlete: map['importe_flete'] ?? 0,
       anticipoFlete: map['anticipo_flete'] ?? 0,
       carga: parsedCarga,
+      sectionProducers: parsedProducers, // <--- Asignamos
       observaciones: map['observaciones'] ?? '',
       embarcoNombre: map['embarco_nombre'] ?? '',
       recibioNombre: map['recibio_nombre'] ?? '',
