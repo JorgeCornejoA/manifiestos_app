@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart'; // <--- IMPORTANTE: Asegúrate de tener este import
 import 'package:manifiestos_app/models/employee.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:signature/signature.dart';
@@ -54,14 +55,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   void _navigateToForm({Employee? employee}) async {
-    // Navegamos a la nueva pantalla completa
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EmployeeFormScreen(employee: employee),
       ),
     );
-    // Al volver, recargamos la lista
     _loadEmployees();
   }
 
@@ -131,8 +130,11 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   final _nameController = TextEditingController();
   final SignatureController _signatureController = SignatureController(penStrokeWidth: 3, penColor: Colors.black);
   final SupabaseService _service = SupabaseService();
+  final ImagePicker _picker = ImagePicker(); // Selector de imagen
+  
   bool _isSaving = false;
   String? _existingSignatureUrl;
+  Uint8List? _uploadedSignatureBytes; // Variable para almacenar la imagen subida
 
   @override
   void initState() {
@@ -150,14 +152,40 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     super.dispose();
   }
 
+  // --- Lógica para seleccionar imagen ---
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800, // Reducir tamaño para que no pese tanto
+      );
+      
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _uploadedSignatureBytes = bytes;
+          _signatureController.clear(); // Si sube imagen, limpiamos el pad
+          _existingSignatureUrl = null; // Ocultamos la firma vieja para mostrar la nueva
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al imagen: $e')));
+    }
+  }
+
   Future<void> _save() async {
     if (_nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El nombre es obligatorio')));
       return;
     }
 
-    if (_signatureController.isEmpty && (_existingSignatureUrl == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La firma es obligatoria')));
+    // Validar si hay firma (ya sea dibujada, subida o existente)
+    bool hasSignature = _signatureController.isNotEmpty || 
+                        _uploadedSignatureBytes != null || 
+                        (_existingSignatureUrl != null && widget.employee?.signatureUrl != null);
+
+    if (!hasSignature) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La firma es obligatoria (Dibuja o Sube imagen)')));
       return;
     }
 
@@ -165,21 +193,30 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
 
     try {
       Uint8List? signatureBytes;
-      if (_signatureController.isNotEmpty) {
+      
+      // PRIORIDAD: 
+      // 1. Imagen subida
+      // 2. Firma dibujada
+      if (_uploadedSignatureBytes != null) {
+        signatureBytes = _uploadedSignatureBytes;
+      } else if (_signatureController.isNotEmpty) {
         signatureBytes = await _signatureController.toPngBytes();
       }
 
       final newEmployee = Employee(
         id: widget.employee?.id,
-        name: _nameController.text,
-        signatureUrl: _existingSignatureUrl,
+        name: _nameController.text.toUpperCase(),
+        // Si no subió nada nuevo, mantenemos la URL vieja (si la borró, será null)
+        signatureUrl: (_uploadedSignatureBytes == null && _signatureController.isEmpty) 
+            ? _existingSignatureUrl 
+            : null, 
       );
 
       await _service.saveEmployee(newEmployee, signatureBytes);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Empleado guardado')));
-        Navigator.pop(context); // Regresar a la lista
+        Navigator.pop(context); 
       }
     } catch (e) {
       if (mounted) {
@@ -204,6 +241,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
             children: [
               TextField(
                 controller: _nameController,
+                textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(labelText: 'Nombre Completo', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 20),
@@ -211,18 +249,25 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
               const Text('Firma:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 10),
               
+              // --- ZONA VISUAL DE FIRMA ---
               Container(
-                height: 250, // Más altura para firmar cómodamente
+                height: 250,
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey),
                   color: Colors.grey[100],
                 ),
                 child: Stack(
                   children: [
-                    if (_existingSignatureUrl != null)
+                    // A. Mostrar imagen SUBIDA manualmente
+                    if (_uploadedSignatureBytes != null)
+                      Center(child: Image.memory(_uploadedSignatureBytes!, fit: BoxFit.contain)),
+
+                    // B. Mostrar firma EXISTENTE de la nube
+                    if (_existingSignatureUrl != null && _uploadedSignatureBytes == null)
                       Center(child: Image.network(_existingSignatureUrl!)),
                     
-                    if (_existingSignatureUrl == null)
+                    // C. Pad para DIBUJAR (Solo si no hay imagen subida)
+                    if (_uploadedSignatureBytes == null && _existingSignatureUrl == null)
                       Signature(
                         controller: _signatureController,
                         backgroundColor: Colors.transparent,
@@ -230,6 +275,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                         width: double.infinity,
                       ),
                       
+                    // Botón BORRAR (Limpia todo)
                     Positioned(
                       right: 10,
                       top: 10,
@@ -237,10 +283,11 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                         backgroundColor: Colors.white,
                         child: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
-                          tooltip: 'Borrar firma y firmar de nuevo',
+                          tooltip: 'Borrar firma y empezar de nuevo',
                           onPressed: () {
                             setState(() {
                               _existingSignatureUrl = null;
+                              _uploadedSignatureBytes = null;
                               _signatureController.clear();
                             });
                           },
@@ -250,6 +297,26 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                   ],
                 ),
               ),
+              
+              const SizedBox(height: 10),
+
+              // --- BOTÓN PARA SUBIR IMAGEN ---
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Subir Imagen de Firma'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey.shade100,
+                        foregroundColor: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
               const SizedBox(height: 30),
               
               SizedBox(

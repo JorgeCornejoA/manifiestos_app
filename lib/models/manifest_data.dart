@@ -2,9 +2,10 @@ import 'dart:typed_data';
 
 class ManifestData {
   final String? id;
+  final int? folio; // <--- NUEVO: Folio Autoincrementable
   final String tipo; 
   final String trailerNo;
-  final String productor; // Se mantiene como resumen (ej: "Prod A / Prod B")
+  final String productor;
   final String fecha;
   final String consignadoA;
   final String domicilio;
@@ -20,7 +21,7 @@ class ManifestData {
   final int anticipoFlete;
   
   final List<List<CargaItem>> carga; 
-  final List<String> sectionProducers; // <--- NUEVO: Lista de productores por sección
+  final List<String> sectionProducers;
   
   final String observaciones;
   final String embarcoNombre;
@@ -41,6 +42,7 @@ class ManifestData {
 
   ManifestData({
     this.id,
+    this.folio, // <--- Agregar al constructor
     this.tipo = 'T',
     required this.trailerNo,
     required this.productor,
@@ -58,7 +60,7 @@ class ManifestData {
     this.importeFlete = 0,
     this.anticipoFlete = 0,
     required this.carga,
-    List<String>? sectionProducers, // Opcional en el constructor
+    List<String>? sectionProducers,
     this.observaciones = '',
     required this.embarcoNombre,
     required this.recibioNombre,
@@ -70,13 +72,12 @@ class ManifestData {
     this.evidencePhotosUrls,
     this.evidencePhotosBytes,
     this.pdfUrl,
-  }) : 
-    // Si no se pasa lista, la creamos vacía basada en la cantidad de cargas
-    sectionProducers = sectionProducers ?? List.filled(carga.length, '');
+  }) : sectionProducers = sectionProducers ?? List.filled(carga.length, '');
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      // 'folio': folio, <-- NO ENVIAMOS FOLIO (La base de datos lo genera)
       'tipo': tipo,
       'trailer_no': trailerNo,
       'productor': productor,
@@ -94,7 +95,7 @@ class ManifestData {
       'importe_flete': importeFlete,
       'anticipo_flete': anticipoFlete,
       'carga': carga.map((section) => section.map((item) => item.toMap()).toList()).toList(),
-      'section_producers': sectionProducers, // <--- Guardamos la lista
+      'section_producers': sectionProducers,
       'observaciones': observaciones,
       'embarco_nombre': embarcoNombre,
       'recibio_nombre': recibioNombre,
@@ -123,21 +124,19 @@ class ManifestData {
       }
     }
 
-    // Recuperar lista de productores
     List<String> parsedProducers = [];
     if (map['section_producers'] != null) {
       parsedProducers = List<String>.from(map['section_producers']);
     } else {
-      // Compatibilidad con manifiestos viejos: Usar el campo 'productor' único
       if (parsedCarga.isNotEmpty) {
         parsedProducers.add(map['productor'] ?? '');
-        // Rellenar resto si hay mas secciones
         for (int i = 1; i < parsedCarga.length; i++) parsedProducers.add('');
       }
     }
 
     return ManifestData(
       id: map['id'],
+      folio: map['folio'], // <--- LEEMOS EL FOLIO DE LA BD
       tipo: map['tipo'] ?? 'T',
       trailerNo: map['trailer_no'] ?? '',
       productor: map['productor'] ?? '',
@@ -155,7 +154,7 @@ class ManifestData {
       importeFlete: map['importe_flete'] ?? 0,
       anticipoFlete: map['anticipo_flete'] ?? 0,
       carga: parsedCarga,
-      sectionProducers: parsedProducers, // <--- Asignamos
+      sectionProducers: parsedProducers,
       observaciones: map['observaciones'] ?? '',
       embarcoNombre: map['embarco_nombre'] ?? '',
       recibioNombre: map['recibio_nombre'] ?? '',

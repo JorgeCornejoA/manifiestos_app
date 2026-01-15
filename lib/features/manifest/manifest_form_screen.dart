@@ -12,7 +12,6 @@ import 'package:intl/intl.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
-// IMPORTAR EL MODELO PRODUCER
 import 'package:manifiestos_app/models/producer.dart';
 
 // Helper class (Sin cambios)
@@ -89,7 +88,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final Set<int> _selectedIndices = {};
   final TextEditingController _bulkTextController = TextEditingController();
 
-  // VARIABLE PARA TIPO
   String _selectedTipo = 'T'; 
 
   final _formKeyStep0 = GlobalKey<FormState>();
@@ -98,10 +96,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _formKeyStep4 = GlobalKey<FormState>();
 
   final _trailerNoController = TextEditingController();
-  
-  // CAMBIO: Lista de controladores para múltiples productores
   List<TextEditingController> _producerControllers = []; 
-
   final _fechaController = TextEditingController();
   
   final _consignadoAController = TextEditingController();
@@ -144,7 +139,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     } else {
       _fechaController.text = _formatDate(DateTime.now());
       setState(() {
-        // Inicializamos con 1 productor y 1 sección
         _addProducerSection(); 
       });
     }
@@ -176,8 +170,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- Lógica Productores y Carga ---
-  // Esta función agrega TANTO el campo de productor COMO la tabla de carga
   void _addProducerSection() {
     setState(() {
       _producerControllers.add(TextEditingController());
@@ -191,7 +183,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _producerControllers[index].dispose();
       _producerControllers.removeAt(index);
       
-      // Limpiar controladores de carga de esa sección
       for (var controller in _cargaSectionsControllers[index]) {
         controller.dispose();
       }
@@ -205,7 +196,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     newControllers.pallets.addListener(_calculateTotals);
     newControllers.cajasPorPallet.addListener(_calculateTotals);
     setState(() {
-      // Seguridad por si el índice no existe
       while (_cargaSectionsControllers.length <= sectionIndex) {
         _cargaSectionsControllers.add([]);
       }
@@ -271,9 +261,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   void _loadManifestData(ManifestData manifest) async { 
     _selectedTipo = manifest.tipo;
-    
     _trailerNoController.text = manifest.trailerNo;
-    // Productor ya no se usa aquí, se carga abajo en la lista dinámica
     _fechaController.text = manifest.fecha;
     _consignadoAController.text = manifest.consignadoA;
     _domicilioController.text = manifest.domicilio;
@@ -309,7 +297,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
     if (mounted) {
       setState(() {
-        // Limpiar todo antes de cargar
         for (var controller in _producerControllers) controller.dispose();
         _producerControllers.clear();
         for (var section in _cargaSectionsControllers) {
@@ -317,33 +304,26 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         }
         _cargaSectionsControllers.clear();
 
-        // 1. CARGAR PRODUCTORES
         List<String> producersList = manifest.sectionProducers;
-        // Compatibilidad: si la lista está vacía, usamos el string simple
         if (producersList.isEmpty && manifest.productor.isNotEmpty) {
            producersList = [manifest.productor];
         } else if (producersList.isEmpty) {
-           producersList = ['']; // Al menos uno vacío
+           producersList = ['']; 
         }
 
         for (String pName in producersList) {
           _producerControllers.add(TextEditingController(text: pName));
         }
 
-        // 2. CARGAR SECCIONES DE CARGA
-        // Ajustamos la cantidad de secciones de carga para que coincida con los productores
-        // (Aunque debería coincidir desde el modelo)
         while (_cargaSectionsControllers.length < producersList.length) {
            _cargaSectionsControllers.add([]);
         }
 
         int sectionIndex = 0;
         for (var sectionData in manifest.carga) {
-          // Si hay más datos de carga que productores, agregamos espacio (edge case)
           if (sectionIndex >= _cargaSectionsControllers.length) {
              _cargaSectionsControllers.add([]);
           }
-          
           List<_CargaItemControllers> sectionControllers = [];
           for (var item in sectionData) {
             final newControllers = _CargaItemControllers(item);
@@ -351,12 +331,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             newControllers.cajasPorPallet.addListener(_calculateTotals);
             sectionControllers.add(newControllers);
           }
-          // Reemplazamos la lista vacía con la cargada
           _cargaSectionsControllers[sectionIndex] = sectionControllers;
           sectionIndex++;
         }
 
-        // Si no hay carga ni productores, inicializar vacío
         if (_producerControllers.isEmpty) {
           _addProducerSection();
         }
@@ -375,9 +353,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   @override
   void dispose() {
     _trailerNoController.dispose();
-    // Productor controllers
     for (var c in _producerControllers) c.dispose();
-    
     _fechaController.dispose();
     _consignadoAController.dispose();
     _domicilioController.dispose();
@@ -406,7 +382,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     super.dispose();
   }
 
-  // --- Buscadores ---
   Future<Iterable<Client>> _searchClients(String query) async {
     if (query.isEmpty) return const Iterable.empty();
     try {
@@ -475,12 +450,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _showErrorSnackbar('Error en "Info General": Faltan campos.');
       return false;
     }
-    // Validar que al menos un productor tenga nombre
     if (_producerControllers.isEmpty || _producerControllers.any((c) => c.text.isEmpty)) {
        _showErrorSnackbar('Error en "Info General": Falta nombre del productor.');
        return false;
     }
-
     if (_consignadoAController.text.isEmpty) {
       _showErrorSnackbar('Error en "Destino": Falta "Consignado A".');
       return false;
@@ -577,6 +550,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
+  // --- FUNCIÓN CLAVE PARA GUARDAR Y USAR EL FOLIO ---
   Future<void> _generateAndSavePdf() async {
     setState(() => _isLoading = true);
     try {
@@ -621,15 +595,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         }).toList();
       }).toList();
 
-      // Recopilar nombres de productores
       List<String> producerNames = _producerControllers.map((c) => c.text).toList();
-      String mainProductorString = producerNames.join(" / "); // Para busqueda simple
+      String mainProductorString = producerNames.join(" / ");
 
+      // 1. Crear Objeto para Base de Datos
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
         tipo: _selectedTipo, 
         trailerNo: _trailerNoController.text,
-        productor: mainProductorString, // Legacy
+        productor: mainProductorString,
         fecha: _fechaController.text,
         consignadoA: _consignadoAController.text,
         domicilio: _domicilioController.text,
@@ -644,7 +618,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         importeFlete: int.tryParse(_importeFleteController.text) ?? 0,
         anticipoFlete: int.tryParse(_anticipoFleteController.text) ?? 0,
         carga: cargaCompleta,
-        sectionProducers: producerNames, // <--- LISTA REAL
+        sectionProducers: producerNames,
         observaciones: _observacionesController.text,
         embarcoNombre: _embarcoNombreController.text,
         recibioNombre: _recibioNombreController.text,
@@ -659,46 +633,51 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         evidencePhotosUrls: widget.manifest?.evidencePhotosUrls, 
       );
 
-      final manifestId = await _supabaseService.saveManifest(dataForBd);
-      if (manifestId == null) throw Exception("Error al guardar en BD.");
+      // 2. GUARDAR Y OBTENER EL OBJETO CON FOLIO
+      final savedManifest = await _supabaseService.saveManifest(dataForBd);
+      
+      if (savedManifest == null) throw Exception("Error al guardar en BD.");
 
+      // 3. Crear Objeto para PDF usando el FOLIO generado
       final dataForPdf = ManifestData(
-        id: manifestId,
-        tipo: dataForBd.tipo,
-        trailerNo: dataForBd.trailerNo,
-        productor: dataForBd.productor,
-        fecha: dataForBd.fecha,
-        consignadoA: dataForBd.consignadoA,
-        domicilio: dataForBd.domicilio,
-        ciudad: dataForBd.ciudad,
-        condiciones: dataForBd.condiciones,
-        operador: dataForBd.operador,
-        trailer: dataForBd.trailer,
-        placas: dataForBd.placas,
-        caja: dataForBd.caja,
-        lineaTransportista: dataForBd.lineaTransportista,
-        tel: dataForBd.tel,
-        importeFlete: dataForBd.importeFlete,
-        anticipoFlete: dataForBd.anticipoFlete,
-        carga: dataForBd.carga,
-        sectionProducers: dataForBd.sectionProducers, // PASAR AL PDF
-        observaciones: dataForBd.observaciones,
-        embarcoNombre: dataForBd.embarcoNombre,
-        recibioNombre: dataForBd.recibioNombre,
-        trailerLayout: dataForBd.trailerLayout,
+        id: savedManifest.id,
+        folio: savedManifest.folio, // <--- AQUÍ ESTÁ EL FOLIO 00001
+        tipo: savedManifest.tipo,
+        trailerNo: savedManifest.trailerNo,
+        productor: savedManifest.productor,
+        fecha: savedManifest.fecha,
+        consignadoA: savedManifest.consignadoA,
+        domicilio: savedManifest.domicilio,
+        ciudad: savedManifest.ciudad,
+        condiciones: savedManifest.condiciones,
+        operador: savedManifest.operador,
+        trailer: savedManifest.trailer,
+        placas: savedManifest.placas,
+        caja: savedManifest.caja,
+        lineaTransportista: savedManifest.lineaTransportista,
+        tel: savedManifest.tel,
+        importeFlete: savedManifest.importeFlete,
+        anticipoFlete: savedManifest.anticipoFlete,
+        carga: savedManifest.carga,
+        sectionProducers: savedManifest.sectionProducers,
+        observaciones: savedManifest.observaciones,
+        embarcoNombre: savedManifest.embarcoNombre,
+        recibioNombre: savedManifest.recibioNombre,
+        trailerLayout: savedManifest.trailerLayout,
         
+        // Importante: Usar los bytes locales para que el PDF se genere rápido
         embarcoFirmaBytes: pdfEmbarcoBytes,
         recibioFirmaBytes: pdfRecibioBytes,
-        
         evidencePhotosBytes: _evidencePhotos,
       );
 
+      // 4. Generar PDF
       final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf);
-      final fileName = 'manifiesto-$manifestId.pdf';
+      final fileName = 'manifiesto-${savedManifest.id}.pdf';
       final pdfUrl = await _supabaseService.uploadPdf(pdfBytes, fileName);
       
       if (pdfUrl != null) {
-        await _supabaseService.updatePdfUrl(manifestId, pdfUrl);
+        await _supabaseService.updatePdfUrl(savedManifest.id!, pdfUrl);
       }
 
       await Printing.layoutPdf(onLayout: (format) async => pdfBytes);
@@ -796,7 +775,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               content: Form(
                 key: _formKeyStep0,
                 child: Column(children: [
-                  // --- SELECCIÓN DE TIPO ---
                   Padding(
                     padding: const EdgeInsets.only(bottom: 15.0),
                     child: Row(
@@ -824,7 +802,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     ),
                   ),
                   
-                  // --- TRAILER Y FECHA ---
                   Row(
                     children: [
                       Expanded(
@@ -853,7 +830,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   ),
                   const SizedBox(height: 20),
                   
-                  // --- PRODUCTORES DINÁMICOS ---
                   const Align(
                     alignment: Alignment.centerLeft, 
                     child: Text("Productores", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
@@ -877,7 +853,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                                 _producerControllers[index].text = selection.name;
                               },
                               fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-                                // Sincronizar controlador
                                 if (controller.text != _producerControllers[index].text) {
                                   controller.text = _producerControllers[index].text;
                                 }
@@ -1201,7 +1176,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // MOSTRAR NOMBRE DEL PRODUCTOR EN EL ENCABEZADO DE LA SECCIÓN
                 Flexible(
                   child: Text(
                     'Carga: ${_producerControllers.length > sectionIndex ? _producerControllers[sectionIndex].text : "Productor ${sectionIndex + 1}"}', 
@@ -1332,7 +1306,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         ],
 
         const SizedBox(height: 20),
-        // BOTON ELIMINADO: Ya no se agrega tabla manual, se hace agregando Productor
       ],
     );
   }

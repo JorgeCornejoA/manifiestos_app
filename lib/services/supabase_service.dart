@@ -10,14 +10,14 @@ class SupabaseService {
   final _supabase = Supabase.instance.client;
   final _uuid = const Uuid();
 
-  Future<String?> saveManifest(ManifestData data) async {
+  // CAMBIO: Ahora retorna Future<ManifestData?> en lugar de String?
+  Future<ManifestData?> saveManifest(ManifestData data) async {
     try {
       final manifestId = data.id ?? _uuid.v4();
 
       String? embarcoFirmaUrl = data.embarcoFirmaUrl;
       String? recibioFirmaUrl = data.recibioFirmaUrl;
       
-      // --- Lógica para Fotos de Evidencia ---
       List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
 
       if (data.evidencePhotosBytes != null && data.evidencePhotosBytes!.isNotEmpty) {
@@ -60,26 +60,38 @@ class SupabaseService {
       final manifestMap = data.toMap();
       manifestMap['embarco_firma_url'] = embarcoFirmaUrl;
       manifestMap['recibio_firma_url'] = recibioFirmaUrl;
-      
       manifestMap['evidence_photos_urls'] = finalPhotoUrls;
-
       manifestMap.remove('pdf_url');
 
       final id = data.id;
+      Map<String, dynamic> savedRecord;
+
       if (id == null) {
         manifestMap['id'] = manifestId;
-        await _supabase.from('manifests').insert(manifestMap);
+        // INSERT y SELECT para obtener el FOLIO generado
+        savedRecord = await _supabase.from('manifests')
+            .insert(manifestMap)
+            .select()
+            .single();
       } else {
-        await _supabase.from('manifests').update(manifestMap).eq('id', id);
+        // UPDATE y SELECT
+        savedRecord = await _supabase.from('manifests')
+            .update(manifestMap)
+            .eq('id', id)
+            .select()
+            .single();
       }
-      return manifestId;
+      
+      // Retornamos el objeto completo desde la BD (incluye el folio)
+      return ManifestData.fromMap(savedRecord);
+
     } catch (e) {
       print('Error en saveManifest: $e');
       return null;
     }
   }
 
-  // --- MÉTODOS PARA PRODUCTORES (NUEVO) ---
+  // --- MÉTODOS PARA PRODUCTORES ---
   Future<List<Map<String, dynamic>>> searchProducers(String query) async {
     final response = await _supabase
         .from('producers')
@@ -90,7 +102,6 @@ class SupabaseService {
   }
 
   Future<void> saveProducer(String name) async {
-    // Evitar duplicados
     final existing = await _supabase.from('producers').select().eq('name', name).maybeSingle();
     if (existing == null) {
       await _supabase.from('producers').insert({'name': name});
@@ -107,7 +118,6 @@ class SupabaseService {
   }
 
   // --- MÉTODOS PARA EMPLEADOS ---
-
   Future<List<Employee>> getEmployees() async {
     try {
       final response = await _supabase
@@ -139,7 +149,9 @@ class SupabaseService {
       final employeeId = employee.id ?? _uuid.v4(); 
 
       if (signatureBytes != null && signatureBytes.isNotEmpty) {
-        final path = 'employee_signatures/$employeeId.png';
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final path = 'employee_signatures/${employeeId}_$timestamp.png';
+        
         await _supabase.storage.from('manifests').uploadBinary(
               path,
               signatureBytes,
@@ -173,7 +185,6 @@ class SupabaseService {
   }
 
   // --- RESTO DE MÉTODOS ---
-
   Future<void> deleteManifest(String id) async {
     try {
       await _supabase.from('manifests').delete().eq('id', id);
@@ -189,7 +200,6 @@ class SupabaseService {
           .from('manifests')
           .select()
           .order('created_at', ascending: false); 
-          
       final manifests = (response as List<dynamic>)
           .map((data) => ManifestData.fromMap(data as Map<String, dynamic>))
           .toList();
