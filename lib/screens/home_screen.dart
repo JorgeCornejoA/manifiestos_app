@@ -1,27 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Importa tus pantallas
 import 'package:manifiestos_app/features/employees/employees_screen.dart';
+import 'package:manifiestos_app/features/company_trailers/company_trailers_screen.dart'; 
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  // --- MODIFICACIÓN: Función de Cerrar Sesión con Confirmación ---
   Future<void> _signOut(BuildContext context) async {
-    // 1. Mostrar el diálogo de confirmación
     final bool? shouldLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cerrar Sesión'),
         content: const Text('¿Estás seguro de que deseas salir de la aplicación?'),
         actions: [
-          // Botón Cancelar
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar'),
           ),
-          // Botón Salir (En rojo para indicar acción de salida)
           TextButton(
             style: TextButton.styleFrom(
               foregroundColor: Colors.redAccent, 
@@ -33,21 +29,17 @@ class HomeScreen extends StatelessWidget {
       ),
     );
 
-    // 2. Si el usuario presionó "Cancelar" o tocó fuera, shouldLogout será null o false.
-    // Solo procedemos si es true.
     if (shouldLogout != true) return;
 
-    // 3. Ejecutamos el cierre de sesión real
     try {
       await Supabase.instance.client.auth.signOut();
       if (context.mounted) {
         Navigator.of(context).pushReplacementNamed('/login');
       }
     } catch (e) {
-      // Manejar error silenciosamente
+      // Error silencioso
     }
   }
-  // ---------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -78,10 +70,19 @@ class HomeScreen extends StatelessWidget {
       ),
       _MenuItem(
         title: 'Operadores',
-        icon: Icons.local_shipping,
+        icon: Icons.person_pin_circle, 
         color: const Color(0xFF388E3C),
         route: '/operators',
       ),
+      // --- CAMBIO DE COLOR AQUÍ ---
+      _MenuItem(
+        title: 'Flotilla / Trailers',
+        icon: Icons.local_shipping,
+        color: const Color(0xFF388E3C), // Mismo verde que operadores
+        isDirectNav: true,
+        destination: const CompanyTrailersScreen(),
+      ),
+      // ----------------------------
       _MenuItem(
         title: 'Empleados',
         icon: Icons.badge,
@@ -100,11 +101,9 @@ class HomeScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               
-              // --- ENCABEZADO ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Logo (Flexible para evitar overflow)
                   Flexible(
                     child: Container(
                       padding: const EdgeInsets.all(2),
@@ -129,11 +128,10 @@ class HomeScreen extends StatelessWidget {
                   
                   const SizedBox(width: 15),
 
-                  // Botón Cerrar Sesión
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () => _signOut(context), // Llama a la nueva función con alerta
+                      onTap: () => _signOut(context),
                       borderRadius: BorderRadius.circular(30),
                       child: Container(
                         padding: const EdgeInsets.all(10),
@@ -154,20 +152,16 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              // ------------------
 
               const SizedBox(height: 20), 
 
-              // --- GRILLA DE BOTONES ---
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final availableHeight = constraints.maxHeight;
                     final availableWidth = constraints.maxWidth;
-                    
-                    final itemHeight = (availableHeight - 20) / 3; 
+                    final itemHeight = (availableHeight - 20) / 4; 
                     final itemWidth = availableWidth / 2; 
-                    
                     final aspectRatio = itemWidth / itemHeight;
 
                     return GridView.builder(

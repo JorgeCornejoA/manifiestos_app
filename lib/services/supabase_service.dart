@@ -4,20 +4,87 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
+import 'package:manifiestos_app/models/company_trailer.dart'; 
 import 'package:uuid/uuid.dart';
 
 class SupabaseService {
   final _supabase = Supabase.instance.client;
   final _uuid = const Uuid();
 
-  // CAMBIO: Ahora retorna Future<ManifestData?> en lugar de String?
+  // ==========================================
+  //      MÉTODOS PARA TRAILERS DE EMPRESA
+  // ==========================================
+
+  Future<List<CompanyTrailer>> searchCompanyTrailers(String query) async {
+    try {
+      final response = await _supabase
+          .from('company_trailers')
+          .select()
+          .ilike('name', '%$query%')
+          .limit(10);
+      return (response as List).map((e) => CompanyTrailer.fromMap(e)).toList();
+    } catch (e) {
+      print('Error buscando trailers: $e');
+      return [];
+    }
+  }
+
+  Future<List<CompanyTrailer>> getCompanyTrailers() async {
+    try {
+      final response = await _supabase
+          .from('company_trailers')
+          .select()
+          .order('name', ascending: true);
+      return (response as List).map((e) => CompanyTrailer.fromMap(e)).toList();
+    } catch (e) {
+      print('Error al obtener trailers: $e');
+      return [];
+    }
+  }
+
+  Future<void> createCompanyTrailer(CompanyTrailer trailer) async {
+    try {
+      final map = trailer.toMap()..remove('id'); 
+      await _supabase.from('company_trailers').insert(map);
+    } catch (e) {
+      print('Error al crear trailer: $e');
+      throw Exception('Error al guardar');
+    }
+  }
+
+  // --- NUEVO: FUNCIÓN PARA EDITAR TRAILER ---
+  Future<void> updateCompanyTrailer(CompanyTrailer trailer) async {
+    try {
+      if (trailer.id == null) throw Exception("ID necesario");
+      await _supabase
+          .from('company_trailers')
+          .update(trailer.toMap())
+          .eq('id', trailer.id!);
+    } catch (e) {
+      print('Error al actualizar trailer: $e');
+      throw Exception('Error al actualizar');
+    }
+  }
+
+  Future<void> deleteCompanyTrailer(int id) async {
+    try {
+      await _supabase.from('company_trailers').delete().eq('id', id);
+    } catch (e) {
+      print('Error al eliminar trailer: $e');
+      throw Exception('Error al eliminar');
+    }
+  }
+
+  // ==========================================
+  //           RESTO DE LOS MÉTODOS
+  // ==========================================
+
+  // --- MANIFIESTOS ---
   Future<ManifestData?> saveManifest(ManifestData data) async {
     try {
       final manifestId = data.id ?? _uuid.v4();
-
       String? embarcoFirmaUrl = data.embarcoFirmaUrl;
       String? recibioFirmaUrl = data.recibioFirmaUrl;
-      
       List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
 
       if (data.evidencePhotosBytes != null && data.evidencePhotosBytes!.isNotEmpty) {
@@ -68,21 +135,17 @@ class SupabaseService {
 
       if (id == null) {
         manifestMap['id'] = manifestId;
-        // INSERT y SELECT para obtener el FOLIO generado
         savedRecord = await _supabase.from('manifests')
             .insert(manifestMap)
             .select()
             .single();
       } else {
-        // UPDATE y SELECT
         savedRecord = await _supabase.from('manifests')
             .update(manifestMap)
             .eq('id', id)
             .select()
             .single();
       }
-      
-      // Retornamos el objeto completo desde la BD (incluye el folio)
       return ManifestData.fromMap(savedRecord);
 
     } catch (e) {
@@ -91,7 +154,59 @@ class SupabaseService {
     }
   }
 
-  // --- MÉTODOS PARA PRODUCTORES ---
+  Future<List<ManifestData>> getManifests() async {
+    try {
+      final response = await _supabase
+          .from('manifests')
+          .select()
+          .order('created_at', ascending: false); 
+      
+      final manifests = (response as List<dynamic>)
+          .map((data) => ManifestData.fromMap(data as Map<String, dynamic>))
+          .toList();
+      return manifests;
+    } catch (e) {
+      print('Error en getManifests: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteManifest(String id) async {
+    try {
+      await _supabase.from('manifests').delete().eq('id', id);
+    } catch (e) {
+      print('Error al eliminar manifiesto: $e');
+      throw Exception('No se pudo eliminar el manifiesto: $e');
+    }
+  }
+
+  Future<String?> uploadPdf(Uint8List pdfBytes, String fileName) async {
+    try {
+      final path = 'pdfs/$fileName';
+      await _supabase.storage.from('manifests').uploadBinary(
+            path,
+            pdfBytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
+      return _supabase.storage.from('manifests').getPublicUrl(path);
+    } catch (e) {
+      print('Error al subir PDF: $e');
+      return null;
+    }
+  }
+
+  Future<void> updatePdfUrl(String manifestId, String pdfUrl) async {
+    try {
+      await _supabase
+          .from('manifests')
+          .update({'pdf_url': pdfUrl})
+          .eq('id', manifestId);
+    } catch (e) {
+      print('Error al actualizar PDF URL: $e');
+    }
+  }
+
+  // --- PRODUCTORES ---
   Future<List<Map<String, dynamic>>> searchProducers(String query) async {
     final response = await _supabase
         .from('producers')
@@ -117,7 +232,7 @@ class SupabaseService {
     await _supabase.from('producers').delete().eq('id', id);
   }
 
-  // --- MÉTODOS PARA EMPLEADOS ---
+  // --- EMPLEADOS ---
   Future<List<Employee>> getEmployees() async {
     try {
       final response = await _supabase
@@ -184,58 +299,7 @@ class SupabaseService {
     }
   }
 
-  // --- RESTO DE MÉTODOS ---
-  Future<void> deleteManifest(String id) async {
-    try {
-      await _supabase.from('manifests').delete().eq('id', id);
-    } catch (e) {
-      print('Error al eliminar manifiesto: $e');
-      throw Exception('No se pudo eliminar el manifiesto: $e');
-    }
-  }
-
-  Future<List<ManifestData>> getManifests() async {
-    try {
-      final response = await _supabase
-          .from('manifests')
-          .select()
-          .order('created_at', ascending: false); 
-      final manifests = (response as List<dynamic>)
-          .map((data) => ManifestData.fromMap(data as Map<String, dynamic>))
-          .toList();
-      return manifests;
-    } catch (e) {
-      print('Error en getManifests: $e');
-      return [];
-    }
-  }
-  
-  Future<String?> uploadPdf(Uint8List pdfBytes, String fileName) async {
-    try {
-      final path = 'pdfs/$fileName';
-      await _supabase.storage.from('manifests').uploadBinary(
-            path,
-            pdfBytes,
-            fileOptions: const FileOptions(upsert: true),
-          );
-      return _supabase.storage.from('manifests').getPublicUrl(path);
-    } catch (e) {
-      print('Error al subir PDF: $e');
-      return null;
-    }
-  }
-
-  Future<void> updatePdfUrl(String manifestId, String pdfUrl) async {
-    try {
-      await _supabase
-          .from('manifests')
-          .update({'pdf_url': pdfUrl})
-          .eq('id', manifestId);
-    } catch (e) {
-      print('Error al actualizar PDF URL: $e');
-    }
-  }
-
+  // --- CLIENTES ---
   Future<List<Map<String, dynamic>>> searchClients(String query) async {
     try {
       final response = await _supabase
@@ -245,19 +309,6 @@ class SupabaseService {
       return response;
     } catch (e) {
       print('Error en searchClients: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> searchOperators(String query) async {
-    try {
-      final response = await _supabase
-          .from('operators')
-          .select()
-          .ilike('name', '%$query%');
-      return response;
-    } catch (e) {
-      print('Error en searchOperators: $e');
       return [];
     }
   }
@@ -309,6 +360,20 @@ class SupabaseService {
     }
   }
 
+  // --- OPERADORES ---
+  Future<List<Map<String, dynamic>>> searchOperators(String query) async {
+    try {
+      final response = await _supabase
+          .from('operators')
+          .select()
+          .ilike('name', '%$query%');
+      return response;
+    } catch (e) {
+      print('Error en searchOperators: $e');
+      return [];
+    }
+  }
+
   Future<List<Operator>> getOperators() async {
     try {
       final response = await _supabase
@@ -345,7 +410,7 @@ class SupabaseService {
     }
   }
 
-  Future<void> deleteOperator(String id) async {
+  Future<void> deleteOperator(String id) async { 
     try {
       await _supabase.from('operators').delete().eq('id', id);
     } catch (e) {

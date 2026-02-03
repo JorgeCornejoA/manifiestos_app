@@ -13,8 +13,8 @@ import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
 import 'package:manifiestos_app/models/producer.dart';
+import 'package:manifiestos_app/models/company_trailer.dart';
 
-// Helper class (Sin cambios)
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController producto;
@@ -83,12 +83,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   List<Uint8List> _evidencePhotos = [];
   final ImagePicker _picker = ImagePicker();
 
-  // VARIABLES PARA SELECCIÓN MÚLTIPLE
   bool _isSelectionMode = false;
   final Set<int> _selectedIndices = {};
   final TextEditingController _bulkTextController = TextEditingController();
 
   String _selectedTipo = 'T'; 
+  
+  bool _showTrailerSelector = false; 
 
   final _formKeyStep0 = GlobalKey<FormState>();
   final _formKeyStep1 = GlobalKey<FormState>();
@@ -550,13 +551,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
-  // --- FUNCIÓN CLAVE PARA GUARDAR Y USAR EL FOLIO ---
   Future<void> _generateAndSavePdf() async {
     setState(() => _isLoading = true);
     try {
       Uint8List? pdfEmbarcoBytes;
       Uint8List? pdfRecibioBytes;
-      
       Uint8List? bdEmbarcoBytes;
       Uint8List? bdRecibioBytes;
 
@@ -598,7 +597,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       List<String> producerNames = _producerControllers.map((c) => c.text).toList();
       String mainProductorString = producerNames.join(" / ");
 
-      // 1. Crear Objeto para Base de Datos
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
         tipo: _selectedTipo, 
@@ -623,25 +621,20 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         embarcoNombre: _embarcoNombreController.text,
         recibioNombre: _recibioNombreController.text,
         trailerLayout: layoutMap,
-        
         embarcoFirmaBytes: bdEmbarcoBytes,
         recibioFirmaBytes: bdRecibioBytes,
         embarcoFirmaUrl: _embarcoFirmaUrl,
         recibioFirmaUrl: _recibioFirmaUrl,
-        
         evidencePhotosBytes: _evidencePhotos, 
         evidencePhotosUrls: widget.manifest?.evidencePhotosUrls, 
       );
 
-      // 2. GUARDAR Y OBTENER EL OBJETO CON FOLIO
       final savedManifest = await _supabaseService.saveManifest(dataForBd);
-      
       if (savedManifest == null) throw Exception("Error al guardar en BD.");
 
-      // 3. Crear Objeto para PDF usando el FOLIO generado
       final dataForPdf = ManifestData(
         id: savedManifest.id,
-        folio: savedManifest.folio, // <--- AQUÍ ESTÁ EL FOLIO 00001
+        folio: savedManifest.folio, 
         tipo: savedManifest.tipo,
         trailerNo: savedManifest.trailerNo,
         productor: savedManifest.productor,
@@ -664,29 +657,29 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         embarcoNombre: savedManifest.embarcoNombre,
         recibioNombre: savedManifest.recibioNombre,
         trailerLayout: savedManifest.trailerLayout,
-        
-        // Importante: Usar los bytes locales para que el PDF se genere rápido
         embarcoFirmaBytes: pdfEmbarcoBytes,
         recibioFirmaBytes: pdfRecibioBytes,
         evidencePhotosBytes: _evidencePhotos,
       );
 
-      // 4. Generar PDF
       final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf);
       final fileName = 'manifiesto-${savedManifest.id}.pdf';
       final pdfUrl = await _supabaseService.uploadPdf(pdfBytes, fileName);
-      
       if (pdfUrl != null) {
         await _supabaseService.updatePdfUrl(savedManifest.id!, pdfUrl);
       }
 
-      await Printing.layoutPdf(onLayout: (format) async => pdfBytes);
+      await Printing.layoutPdf(
+        onLayout: (format) async => pdfBytes,
+        name: fileName,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Manifiesto guardado y PDF generado con éxito')));
         Navigator.of(context).pop();
       }
+
     } catch (e) {
       if (mounted) _showErrorSnackbar('Error al generar PDF: $e');
     } finally {
@@ -973,11 +966,25 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       setState(() {
                         _selectedOperator = selection;
                         _operadorController.text = selection.name;
-                        _trailerController.text = selection.trailer;
-                        _placasController.text = selection.placas;
-                        _cajaController.text = selection.caja;
-                        _lineaTransportistaController.text = selection.lineaTransportista;
                         _telController.text = selection.tel;
+                        
+                        // --- AQUÍ ESTÁ EL CAMBIO SOLICITADO ---
+                        _recibioNombreController.text = selection.name; 
+
+                        // --- LÓGICA LOCAL VS FORÁNEO ---
+                        if (selection.isLocal) {
+                          _showTrailerSelector = true;
+                          _trailerController.clear();
+                          _placasController.clear();
+                          _cajaController.clear();
+                          _lineaTransportistaController.text = "FRUVER (PROPIO)";
+                        } else {
+                          _showTrailerSelector = false;
+                          _trailerController.text = selection.trailer;
+                          _placasController.text = selection.placas;
+                          _cajaController.text = selection.caja;
+                          _lineaTransportistaController.text = selection.lineaTransportista;
+                        }
                       });
                       FocusScope.of(context).nextFocus();
                     },
@@ -998,6 +1005,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                           if (_selectedOperator != null && value != _selectedOperator!.name) {
                             setState(() {
                               _selectedOperator = null;
+                              _showTrailerSelector = false; 
                               _trailerController.clear();
                               _placasController.clear();
                               _cajaController.clear();
@@ -1009,6 +1017,47 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       );
                     },
                   ),
+                  
+                  // --- SELECTOR DE TRAILER LOCAL ---
+                  if (_showTrailerSelector) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        border: Border.all(color: Colors.blue),
+                        borderRadius: BorderRadius.circular(8)
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Seleccione el Trailer Local:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                          Autocomplete<CompanyTrailer>(
+                            optionsBuilder: (textValue) => _supabaseService.searchCompanyTrailers(textValue.text),
+                            displayStringForOption: (t) => t.name,
+                            onSelected: (trailer) {
+                              setState(() {
+                                _trailerController.text = trailer.name;
+                                _placasController.text = trailer.plate;
+                                _cajaController.text = trailer.box;
+                              });
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                               return TextField(
+                                 controller: controller,
+                                 focusNode: focusNode,
+                                 decoration: const InputDecoration(
+                                   hintText: 'Buscar trailer (ej: 01, T-20)...',
+                                   icon: Icon(Icons.local_shipping)
+                                 ),
+                               );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -1017,7 +1066,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _trailerController,
                             decoration: const InputDecoration(labelText: 'TRAILER'),
-                            readOnly: _trailerController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            readOnly: true, 
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1026,7 +1075,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _placasController,
                             decoration: const InputDecoration(labelText: 'PLACAS'),
-                            readOnly: _placasController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            readOnly: true,
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1035,7 +1084,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _cajaController,
                             decoration: const InputDecoration(labelText: 'CAJA'),
-                            readOnly: _cajaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            readOnly: true,
                             textInputAction: TextInputAction.next),
                       ),
                     ],
@@ -1047,7 +1096,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _lineaTransportistaController,
                             decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
-                            readOnly: _lineaTransportistaController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            readOnly: true,
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1055,7 +1104,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _telController,
                             decoration: const InputDecoration(labelText: 'TEL.'),
-                            readOnly: _telController.text.isNotEmpty && _operadorController.text.isNotEmpty,
+                            readOnly: true,
                             textInputAction: TextInputAction.next),
                       ),
                     ],
