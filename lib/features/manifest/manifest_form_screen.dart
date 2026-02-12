@@ -967,11 +967,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         _selectedOperator = selection;
                         _operadorController.text = selection.name;
                         _telController.text = selection.tel;
-                        
-                        // --- AQUÍ ESTÁ EL CAMBIO SOLICITADO ---
-                        _recibioNombreController.text = selection.name; 
+                        _recibioNombreController.text = selection.name;
 
-                        // --- LÓGICA LOCAL VS FORÁNEO ---
                         if (selection.isLocal) {
                           _showTrailerSelector = true;
                           _trailerController.clear();
@@ -1018,7 +1015,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     },
                   ),
                   
-                  // --- SELECTOR DE TRAILER LOCAL ---
                   if (_showTrailerSelector) ...[
                     const SizedBox(height: 10),
                     Container(
@@ -1066,7 +1062,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _trailerController,
                             decoration: const InputDecoration(labelText: 'TRAILER'),
-                            readOnly: true, 
+                            // readOnly ELIMINADO para permitir edición manual
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1075,7 +1071,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _placasController,
                             decoration: const InputDecoration(labelText: 'PLACAS'),
-                            readOnly: true,
+                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1084,7 +1080,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _cajaController,
                             decoration: const InputDecoration(labelText: 'CAJA'),
-                            readOnly: true,
+                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                     ],
@@ -1096,7 +1092,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _lineaTransportistaController,
                             decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
-                            readOnly: true,
+                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1104,7 +1100,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _telController,
                             decoration: const InputDecoration(labelText: 'TEL.'),
-                            readOnly: true,
+                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                     ],

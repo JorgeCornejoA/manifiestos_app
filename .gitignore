@@ -44,3 +44,5 @@ app.*.map.json
 
 # Ignorar archivo de variables de entorno
 .env
+.vercel
+.env*.local
