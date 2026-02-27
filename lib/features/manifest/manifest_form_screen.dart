@@ -68,7 +68,7 @@ class ManifestFormScreen extends StatefulWidget {
 
 class _ManifestFormScreenState extends State<ManifestFormScreen> {
   int _currentStep = 0;
-  final int _totalSteps = 7; 
+  final int _totalSteps = 8; 
   
   final SupabaseService _supabaseService = SupabaseService();
   bool _isLoading = false;
@@ -88,13 +88,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final TextEditingController _bulkTextController = TextEditingController();
 
   String _selectedTipo = 'T'; 
-  
   bool _showTrailerSelector = false; 
 
   final _formKeyStep0 = GlobalKey<FormState>();
   final _formKeyStep1 = GlobalKey<FormState>();
   final _formKeyStep2 = GlobalKey<FormState>();
-  final _formKeyStep4 = GlobalKey<FormState>();
+  final _formKeyStep4 = GlobalKey<FormState>(); 
+  final _formKeyStep5 = GlobalKey<FormState>(); 
 
   final _trailerNoController = TextEditingController();
   List<TextEditingController> _producerControllers = []; 
@@ -142,6 +142,19 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       setState(() {
         _addProducerSection(); 
       });
+      _loadCurrentEmployee(); 
+    }
+  }
+
+  Future<void> _loadCurrentEmployee() async {
+    final emp = await _supabaseService.getCurrentEmployee();
+    if (emp != null && mounted) {
+      setState(() {
+        _embarcoNombreController.text = emp.name;
+        if (emp.signatureUrl != null) {
+          _embarcoFirmaUrl = emp.signatureUrl;
+        }
+      });
     }
   }
 
@@ -183,7 +196,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     setState(() {
       _producerControllers[index].dispose();
       _producerControllers.removeAt(index);
-      
       for (var controller in _cargaSectionsControllers[index]) {
         controller.dispose();
       }
@@ -446,8 +458,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
 
   bool _validateAllSteps() {
-    if (_trailerNoController.text.isEmpty ||
-        _fechaController.text.isEmpty) {
+    if (_trailerNoController.text.isEmpty || _fechaController.text.isEmpty) {
       _showErrorSnackbar('Error en "Info General": Faltan campos.');
       return false;
     }
@@ -481,8 +492,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         }
       }
     }
-    if (_embarcoNombreController.text.isEmpty ||
-        _recibioNombreController.text.isEmpty) {
+    if (_observacionesController.text.trim().isEmpty) {
+      _showErrorSnackbar('Error en "Observaciones": El campo es obligatorio.');
+      return false;
+    }
+    if (_embarcoNombreController.text.isEmpty || _recibioNombreController.text.isEmpty) {
        _showErrorSnackbar('Error en "Firmas": Faltan los nombres.');
        return false;
     }
@@ -518,9 +532,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                          _cargaSectionsControllers.every((s) => s.isNotEmpty);
         if (!isValidCurrent) _showErrorSnackbar('Añada carga antes de continuar.');
       }
-      else if (_currentStep == 4) isValidCurrent = _formKeyStep4.currentState!.validate();
-      else if (_currentStep == 5) isValidCurrent = true; 
+      else if (_currentStep == 4) isValidCurrent = _formKeyStep4.currentState!.validate(); 
+      else if (_currentStep == 5) isValidCurrent = _formKeyStep5.currentState!.validate(); 
       else if (_currentStep == 6) isValidCurrent = true; 
+      else if (_currentStep == 7) isValidCurrent = true; 
       
       if (isValidCurrent) {
         setState(() => _currentStep += 1);
@@ -1062,7 +1077,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _trailerController,
                             decoration: const InputDecoration(labelText: 'TRAILER'),
-                            // readOnly ELIMINADO para permitir edición manual
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1071,7 +1085,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _placasController,
                             decoration: const InputDecoration(labelText: 'PLACAS'),
-                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1080,7 +1093,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _cajaController,
                             decoration: const InputDecoration(labelText: 'CAJA'),
-                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                     ],
@@ -1092,7 +1104,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _lineaTransportistaController,
                             decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
-                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                       const SizedBox(width: 10),
@@ -1100,7 +1111,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         child: TextFormField(
                             controller: _telController,
                             decoration: const InputDecoration(labelText: 'TEL.'),
-                            // readOnly ELIMINADO
                             textInputAction: TextInputAction.next),
                       ),
                     ],
@@ -1134,18 +1144,34 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               content: _buildCargaTable(),
               isActive: _currentStep >= 3,
             ),
+            
+            // --- NUEVO PASO: OBSERVACIONES ---
+            Step(
+              title: const Text('Observaciones'),
+              content: Form(
+                key: _formKeyStep4,
+                child: TextFormField(
+                  controller: _observacionesController,
+                  decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
+                  maxLines: 3,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'El campo de observaciones es obligatorio' : null,
+                ),
+              ),
+              isActive: _currentStep >= 4,
+            ),
+            
             Step(
               title: const Text('Firmas'),
               content: Form(
-                key: _formKeyStep4,
+                key: _formKeyStep5,
                 child: _buildSignatureSection()
               ),
-              isActive: _currentStep >= 4,
+              isActive: _currentStep >= 5,
             ),
             Step(
               title: const Text('Diagrama'),
               content: _buildTrailerDiagram(),
-              isActive: _currentStep >= 5,
+              isActive: _currentStep >= 6,
             ),
             Step(
               title: const Text('Evidencia'),
@@ -1201,7 +1227,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     const Text('No hay fotos adjuntas.', style: TextStyle(color: Colors.grey)),
                 ],
               ),
-              isActive: _currentStep >= 6, 
+              isActive: _currentStep >= 7, 
             ),
           ],
         ),
@@ -1359,11 +1385,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          TextFormField(
-              controller: _observacionesController,
-              decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
-              maxLines: 3),
-          const SizedBox(height: 24),
           _buildSignaturePad(
               title: 'EMBARCÓ (Nombre y Firma)',
               nameController: _embarcoNombreController,
@@ -1517,12 +1538,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   Widget _buildTrailerDiagram() {
     return Column(
       children: [
-        // --- BARRA DE HERRAMIENTAS DE SELECCIÓN ---
         Padding(
           padding: const EdgeInsets.only(bottom: 10.0),
           child: Column(
             children: [
-              // Fila de controles principales
               Row(
                 children: [
                   Expanded(
@@ -1530,7 +1549,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       onPressed: () {
                         setState(() {
                           _isSelectionMode = !_isSelectionMode;
-                          _selectedIndices.clear(); // Limpiar al cambiar modo
+                          _selectedIndices.clear(); 
                           _bulkTextController.clear();
                         });
                       },
@@ -1545,12 +1564,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 ],
               ),
               
-              // Herramientas visibles SOLO en modo selección
               if (_isSelectionMode) ...[
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    // Botón Seleccionar Todo
                     TextButton(
                       onPressed: () {
                         setState(() {
@@ -1588,6 +1605,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                             _trailerLayoutControllers[index]?.text = _bulkTextController.text;
                           }
                           
+                          // --- LA MEJORA: LIMPIAR AL APLICAR ---
+                          _selectedIndices.clear();
+                          _bulkTextController.clear();
+                          
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Texto aplicado a las casillas seleccionadas'), duration: Duration(seconds: 1)),
                           );
@@ -1603,7 +1624,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
         ),
 
-        // --- EL DIAGRAMA (GRID) ---
         Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [Text('DIFUSOR'), Text('PUERTAS')]),
@@ -1621,7 +1641,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             final isSelected = _selectedIndices.contains(index);
             final controller = _trailerLayoutControllers[index];
 
-            // Si estamos en MODO SELECCIÓN, mostramos cuadros tocables
             if (_isSelectionMode) {
               return InkWell(
                 onTap: () {
@@ -1656,13 +1675,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               );
             }
 
-            // Si NO estamos en modo selección, mostramos los inputs normales
             return TextFormField(
                 controller: controller,
                 decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     labelText: '${index + 1}',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8) // Ajuste para que se vea mejor
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8) 
                 ),
                 textAlign: TextAlign.center);
           },

@@ -20,63 +20,93 @@ class PdfGenerator {
     final logoImage = pw.MemoryImage(logoAsset.buffer.asUint8List());
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         theme: theme,
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 24),
         build: (context) {
-          return pw.Column(
-            children: [
-              _buildHeader(context, logoImage, data),
-              pw.SizedBox(height: 10),
-              pw.Row(
+          return [
+            // --- ENCABEZADO ---
+            _buildHeader(context, logoImage, data),
+            pw.SizedBox(height: 10),
+            
+            // --- LA MAGIA: PARTITIONS ---
+            // Esto crea columnas independientes. Si la izquierda es muy larga, pasa de hoja sola.
+            pw.Partitions(
+              children: [
+                
+                // COLUMNA IZQUIERDA (Info General y Carga - Ocupa 70%)
+                pw.Partition(
+                  flex: 7,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                    children: [
+                      _buildInfoSection(context, data),
+                      pw.SizedBox(height: 10),
+                      
+                      // Tablas de Carga (Se pondrán justo debajo de info)
+                      ...data.carga.asMap().entries.map((entry) {
+                         int index = entry.key;
+                         List<CargaItem> seccion = entry.value;
+                         String productorName = "";
+                         if (index < data.sectionProducers.length) {
+                           productorName = data.sectionProducers[index];
+                         }
+
+                         return pw.Padding(
+                           padding: const pw.EdgeInsets.only(bottom: 10),
+                           child: _buildCargaTable(context, seccion, productorName)
+                         );
+                      }).toList(),
+
+                      // Observaciones
+                      pw.SizedBox(height: 5),
+                      pw.Text('Observaciones: ${data.observaciones}',
+                          style: const pw.TextStyle(fontSize: 9)),
+                      pw.SizedBox(height: 10),
+                      _buildAdditionalText(),
+                    ]
+                  ),
+                ),
+
+                // COLUMNA DERECHA (Diagrama del Trailer - Ocupa 30%)
+                pw.Partition(
+                  flex: 3,
+                  child: pw.Padding(
+                    padding: const pw.EdgeInsets.only(left: 15), // Separación entre carga y diagrama
+                    child: _buildTrailerDiagram(context, data.trailerLayout),
+                  )
+                ),
+                
+              ]
+            ),
+
+            pw.SizedBox(height: 30),
+
+            // --- SECCIÓN DE FIRMAS Y GENERADO POR (Bloque irrompible) ---
+            pw.Container(
+              child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Expanded(
-                    flex: 7,
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                      children: [
-                        _buildInfoSection(context, data),
-                        
-                        // Tablas de carga
-                        ...data.carga.asMap().entries.map((entry) {
-                           int index = entry.key;
-                           List<CargaItem> seccion = entry.value;
-                           String productorName = "";
-                           if (index < data.sectionProducers.length) {
-                             productorName = data.sectionProducers[index];
-                           }
-
-                           return pw.Padding(
-                             padding: const pw.EdgeInsets.only(top: 5),
-                             child: _buildCargaTable(context, seccion, productorName)
-                           );
-                        }),
-
-                        pw.SizedBox(height: 5),
-                        pw.Text('Observaciones: ${data.observaciones}',
-                            style: const pw.TextStyle(fontSize: 9)),
-                        pw.SizedBox(height: 10),
-                        _buildAdditionalText(),
-                      ],
-                    ),
+                  _buildSignatureSection(context, data),
+                  pw.SizedBox(height: 15),
+                  pw.Text(
+                    'Generado por: ${data.embarcoNombre}', 
+                    style: pw.TextStyle(
+                      fontSize: 7, 
+                      color: PdfColors.grey700, 
+                      fontStyle: pw.FontStyle.italic
+                    )
                   ),
-                  pw.SizedBox(width: 15),
-                  pw.Expanded(
-                    flex: 3,
-                    child: _buildTrailerDiagram(context, data.trailerLayout),
-                  ),
-                ],
-              ),
-              pw.Spacer(),
-              _buildSignatureSection(context, data),
-            ],
-          );
+                ]
+              )
+            ),
+          ];
         },
       ),
     );
 
+    // --- PÁGINAS DE EVIDENCIA FOTOGRÁFICA ---
     if (data.evidencePhotosBytes != null) {
       for (var photoBytes in data.evidencePhotosBytes!) {
         final image = pw.MemoryImage(photoBytes);
@@ -103,7 +133,6 @@ class PdfGenerator {
   static pw.Widget _buildHeader(
       pw.Context context, pw.ImageProvider logo, ManifestData data) {
     
-    // Roboto (heredado del theme) para los textos normales
     final headerTextStyle = pw.TextStyle(
         color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10);
 
@@ -138,7 +167,6 @@ class PdfGenerator {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            // --- TABLA: NOTA DE REMISIÓN ---
             pw.SizedBox(
               width: 120,
               child: pw.Table(
@@ -163,11 +191,10 @@ class PdfGenerator {
                     pw.Container(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       alignment: pw.Alignment.center,
-                      // --- EXCEPCIÓN DE FUENTE: COURIER (MÁQUINA DE ESCRIBIR) ---
                       child: pw.Text(
-                        'Nº $folioString', // Usamos Nº para evitar error de cuadro
+                        'Nº $folioString', 
                         style: pw.TextStyle(
-                          font: pw.Font.courierBold(), // <--- SOLO AQUÍ COURIER
+                          font: pw.Font.courierBold(), 
                           color: PdfColors.red, 
                           fontSize: 12,
                           fontWeight: pw.FontWeight.bold
@@ -181,7 +208,6 @@ class PdfGenerator {
             
             pw.SizedBox(height: 5),
 
-            // --- TABLA AZUL DE TRAILER ---
             pw.SizedBox(
               width: 120,
               child: pw.Table(
@@ -216,7 +242,6 @@ class PdfGenerator {
   }
 
   static pw.Widget _buildInfoSection(pw.Context context, ManifestData data) {
-    // Estas fuentes serán Roboto (del theme principal)
     final labelStyle =
         pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
     final valueStyle = const pw.TextStyle(fontSize: 9);
@@ -303,7 +328,6 @@ class PdfGenerator {
   }
 
   static pw.Widget _buildCargaTable(pw.Context context, List<CargaItem> carga, String productorName) {
-    // Roboto
     final headerTextStyle = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
 
     final totalPallets = carga.fold<int>(0, (sum, item) => sum + item.pallets);
@@ -312,13 +336,16 @@ class PdfGenerator {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
+        // Título de la tabla
         pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.all(1),
+          padding: const pw.EdgeInsets.symmetric(vertical: 2), 
           alignment: pw.Alignment.center,
           color: PdfColors.lightBlue800,
           child: pw.Text("DATOS DE LA CARGA - ${productorName.toUpperCase()}", style: headerTextStyle),
         ),
+        
+        // Tabla (Si es muy larga, repetirá los encabezados en la página 2)
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),
           columnWidths: const {
@@ -330,6 +357,7 @@ class PdfGenerator {
           },
           children: [
             pw.TableRow(
+              repeat: true, // ¡Clave para que no se pierdan los títulos al cambiar de hoja!
               decoration: const pw.BoxDecoration(color: PdfColors.lightBlue100),
               children: [
                 _cellHeader('PRODUCTO'),
@@ -490,7 +518,6 @@ class PdfGenerator {
         children: [
           pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index1 + 1}', style: const pw.TextStyle(fontSize: 8))),
           
-          // --- AQUÍ ESTÁ EL TEXTO CENTRADO ---
           pw.Container(
             height: 25, 
             alignment: pw.Alignment.center, 

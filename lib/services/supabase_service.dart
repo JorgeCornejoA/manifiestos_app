@@ -52,7 +52,6 @@ class SupabaseService {
     }
   }
 
-  // --- NUEVO: FUNCIÓN PARA EDITAR TRAILER ---
   Future<void> updateCompanyTrailer(CompanyTrailer trailer) async {
     try {
       if (trailer.id == null) throw Exception("ID necesario");
@@ -76,10 +75,9 @@ class SupabaseService {
   }
 
   // ==========================================
-  //           RESTO DE LOS MÉTODOS
+  //           MANIFIESTOS
   // ==========================================
 
-  // --- MANIFIESTOS ---
   Future<ManifestData?> saveManifest(ManifestData data) async {
     try {
       final manifestId = data.id ?? _uuid.v4();
@@ -223,6 +221,15 @@ class SupabaseService {
     }
   }
   
+  Future<void> updateProducer(int id, String name) async {
+    try {
+      await _supabase.from('producers').update({'name': name}).eq('id', id);
+    } catch (e) {
+      print('Error al actualizar productor: $e');
+      throw Exception('Error al actualizar');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getProducers() async {
     final response = await _supabase.from('producers').select().order('name', ascending: true);
     return List<Map<String, dynamic>>.from(response);
@@ -233,6 +240,27 @@ class SupabaseService {
   }
 
   // --- EMPLEADOS ---
+  Future<Employee?> getCurrentEmployee() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null || user.email == null) return null;
+      
+      final response = await _supabase
+          .from('employees')
+          .select()
+          .eq('email', user.email!)
+          .maybeSingle(); 
+          
+      if (response != null) {
+        return Employee.fromMap(response);
+      }
+      return null;
+    } catch (e) {
+      print('Error al buscar empleado actual: $e');
+      return null;
+    }
+  }
+
   Future<List<Employee>> getEmployees() async {
     try {
       final response = await _supabase
@@ -258,7 +286,8 @@ class SupabaseService {
     }
   }
 
-  Future<void> saveEmployee(Employee employee, Uint8List? signatureBytes) async {
+  // --- MODIFICADO PARA INCLUIR CREACIÓN DE USUARIO CON CONTRASEÑA ---
+  Future<void> saveEmployee(Employee employee, Uint8List? signatureBytes, {String? password}) async {
     try {
       String? signatureUrl = employee.signatureUrl;
       final employeeId = employee.id ?? _uuid.v4(); 
@@ -278,15 +307,30 @@ class SupabaseService {
       final map = employee.toMap();
       map['signature_url'] = signatureUrl;
 
+      // 1. Guardar en Base de Datos
       if (employee.id == null) {
         map['id'] = employeeId;
         await _supabase.from('employees').insert(map);
       } else {
         await _supabase.from('employees').update(map).eq('id', employee.id!);
       }
+
+      // 2. Si es un nuevo registro y mandaron contraseña, crear el usuario en Auth
+      if (password != null && password.isNotEmpty && employee.email != null) {
+        try {
+          await _supabase.auth.signUp(
+            email: employee.email!,
+            password: password,
+          );
+        } catch (e) {
+          // Si falla Auth, no detenemos el guardado, pero lo notificamos
+          throw Exception('Empleado guardado, pero falló la creación de su cuenta de acceso: $e');
+        }
+      }
+
     } catch (e) {
       print('Error guardando empleado: $e');
-      throw Exception('Error al guardar empleado');
+      throw Exception('Error al guardar empleado: $e');
     }
   }
 

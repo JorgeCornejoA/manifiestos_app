@@ -1,4 +1,3 @@
-// lib/features/clients/clients_screen.dart
 import 'package:flutter/material.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
@@ -11,117 +10,218 @@ class ClientsScreen extends StatefulWidget {
 }
 
 class _ClientsScreenState extends State<ClientsScreen> {
-  final _supabaseService = SupabaseService();
-  late Future<List<Client>> _clientsFuture;
+  final SupabaseService _supabaseService = SupabaseService();
+  List<Client> _clients = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _refreshClients();
+    _loadClients();
   }
 
-  /// Carga o recarga la lista de clientes
-  void _refreshClients() {
-    setState(() {
-      _clientsFuture = _supabaseService.getClients();
-    });
+  Future<void> _loadClients() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await _supabaseService.getClients();
+      setState(() {
+        _clients = data;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
-  /// Navega al formulario para crear o editar un cliente
-  Future<void> _navigateToForm([Client? client]) async {
-    // Navegamos al formulario y esperamos a que regrese (con pop)
-    await Navigator.of(context).pushNamed(
-      '/client-form',
-      arguments: client, // Pasamos el cliente como argumento
-    );
-    // Cuando regrese, recargamos la lista
-    _refreshClients();
-  }
-
-  /// Muestra un diálogo de confirmación para eliminar
   Future<void> _deleteClient(Client client) async {
-    final bool? confirmed = await showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar Eliminación'),
-        content: Text('¿Estás seguro de que deseas eliminar a ${client.name}?'),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar Cliente'),
+        content: Text('¿Seguro que deseas eliminar a ${client.name}?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Eliminar'),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-          ),
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Eliminar')),
         ],
       ),
     );
 
-    if (confirmed == true && client.id != null) {
+    if (confirm == true && client.id != null) {
       try {
-        await _supabaseService.deleteClient(client.id!);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${client.name} eliminado')),
-        );
-        _refreshClients();
+        await _supabaseService.deleteClient(client.id!); // O client.id.toString() si en tu BD es int
+        _loadClients();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al eliminar: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
+        }
       }
     }
+  }
+
+  void _showClientDialog({Client? client}) {
+    final nameCtrl = TextEditingController(text: client?.name ?? '');
+    final domicilioCtrl = TextEditingController(text: client?.domicilio ?? '');
+    final ciudadCtrl = TextEditingController(text: client?.ciudad ?? '');
+    
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Evita que se cierre tocando fuera mientras guarda
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text(client == null ? 'Nuevo Cliente' : 'Editar Cliente'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.8, // Fija el ancho del modal
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre / Consignado A',
+                        icon: Icon(Icons.business),
+                      ),
+                      enabled: !isSaving,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: domicilioCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Domicilio',
+                        icon: Icon(Icons.location_on),
+                      ),
+                      enabled: !isSaving,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: ciudadCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Ciudad',
+                        icon: Icon(Icons.location_city),
+                      ),
+                      enabled: !isSaving,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              if (!isSaving)
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancelar')),
+              ElevatedButton(
+                onPressed: isSaving ? null : () async {
+                  if (nameCtrl.text.isEmpty) return;
+
+                  // Activamos el estado de carga
+                  setStateDialog(() {
+                    isSaving = true;
+                  });
+
+                  // Creamos el objeto cliente con los datos del formulario
+                  final clientData = Client(
+                    id: client?.id, // Mantiene el ID si es edición
+                    name: nameCtrl.text,
+                    domicilio: domicilioCtrl.text,
+                    ciudad: ciudadCtrl.text,
+                  );
+
+                  try {
+                    if (client == null) {
+                      await _supabaseService.createClient(clientData);
+                    } else {
+                      await _supabaseService.updateClient(clientData);
+                    }
+                    
+                    if (mounted) _loadClients();
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  } catch (e) {
+                    setStateDialog(() {
+                      isSaving = false;
+                    });
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Error al guardar: $e'))
+                      );
+                    }
+                  }
+                },
+                child: isSaving 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : const Text('Guardar'),
+              ),
+            ],
+          );
+        }
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Administrar Clientes'),
+        title: const Text('Directorio de Clientes'),
       ),
-      body: FutureBuilder<List<Client>>(
-        future: _clientsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final clients = snapshot.data;
-          if (clients == null || clients.isEmpty) {
-            return const Center(
-              child: Text('No hay clientes. Añade uno con el botón "+".'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: clients.length,
-            itemBuilder: (context, index) {
-              final client = clients[index];
-              return ListTile(
-                title: Text(client.name),
-                subtitle: Text(client.domicilio.isNotEmpty
-                    ? client.domicilio
-                    : 'Sin domicilio'),
-                onTap: () => _navigateToForm(client), // Editar
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _deleteClient(client), // Eliminar
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _clients.isEmpty
+              ? const Center(child: Text('No hay clientes registrados.'))
+              : ListView.builder(
+                  itemCount: _clients.length,
+                  itemBuilder: (context, index) {
+                    final c = _clients[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.teal.shade50,
+                          child: const Icon(Icons.business, color: Colors.teal),
+                        ),
+                        title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (c.domicilio.isNotEmpty) Text(c.domicilio, style: const TextStyle(fontSize: 12)),
+                            if (c.ciudad.isNotEmpty) Text(c.ciudad, style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Botón Editar
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => _showClientDialog(client: c),
+                            ),
+                            // Botón Eliminar
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _deleteClient(c),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          );
-        },
-      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToForm(), // Crear nuevo
+        onPressed: () => _showClientDialog(), // Llama a la función sin parámetros para Crear
         child: const Icon(Icons.add),
-        tooltip: 'Añadir Cliente',
       ),
     );
   }

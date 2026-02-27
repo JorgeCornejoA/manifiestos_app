@@ -43,6 +43,10 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // --- VALIDACIÓN DE ADMINISTRADOR ---
+    final currentUserEmail = Supabase.instance.client.auth.currentUser?.email;
+    final isAdmin = currentUserEmail == 'soporte@fruver.com.mx';
+
     final menuItems = [
       _MenuItem(
         title: 'Nuevo Manifiesto',
@@ -74,23 +78,27 @@ class HomeScreen extends StatelessWidget {
         color: const Color(0xFF388E3C),
         route: '/operators',
       ),
-      // --- CAMBIO DE COLOR AQUÍ ---
       _MenuItem(
         title: 'Flotilla / Trailers',
         icon: Icons.local_shipping,
-        color: const Color(0xFF388E3C), // Mismo verde que operadores
+        color: const Color(0xFF388E3C),
         isDirectNav: true,
         destination: const CompanyTrailersScreen(),
       ),
-      // ----------------------------
-      _MenuItem(
-        title: 'Empleados',
-        icon: Icons.badge,
-        color: const Color(0xFF43A047),
-        isDirectNav: true,
-        destination: const EmployeesScreen(),
-      ),
     ];
+
+    // SOLO SI ES ADMIN SE AGREGA EL BOTÓN DE EMPLEADOS
+    if (isAdmin) {
+      menuItems.add(
+        _MenuItem(
+          title: 'Empleados',
+          icon: Icons.badge,
+          color: const Color(0xFF43A047),
+          isDirectNav: true,
+          destination: const EmployeesScreen(),
+        )
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),

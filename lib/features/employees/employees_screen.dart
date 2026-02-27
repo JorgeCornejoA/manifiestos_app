@@ -1,11 +1,10 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; // <--- IMPORTANTE: Asegúrate de tener este import
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
+import 'package:signature/signature.dart';
 import 'package:manifiestos_app/models/employee.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
-import 'package:signature/signature.dart';
 
-// --- PANTALLA DE LISTA ---
 class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({super.key});
 
@@ -26,56 +25,333 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   Future<void> _loadEmployees() async {
     setState(() => _isLoading = true);
-    final data = await _supabaseService.getEmployees();
-    if (mounted) {
+    try {
+      final data = await _supabaseService.getEmployees();
       setState(() {
         _employees = data;
-        _isLoading = false;
       });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _deleteEmployee(String id) async {
+  Future<void> _deleteEmployee(Employee employee) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar'),
-        content: const Text('¿Borrar este empleado?'),
+        title: const Text('Eliminar Empleado'),
+        content: Text('¿Seguro de eliminar a ${employee.name}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Borrar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Eliminar')),
         ],
       ),
     );
 
-    if (confirm == true) {
-      await _supabaseService.deleteEmployee(id);
-      _loadEmployees();
+    if (confirm == true && employee.id != null) {
+      try {
+        await _supabaseService.deleteEmployee(employee.id!);
+        _loadEmployees();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Error al eliminar: $e')));
+        }
+      }
     }
   }
 
-  void _navigateToForm({Employee? employee}) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EmployeeFormScreen(employee: employee),
-      ),
+  void _showEmployeeDialog({Employee? employee}) {
+    final nameCtrl = TextEditingController(text: employee?.name ?? '');
+    final emailCtrl = TextEditingController(text: employee?.email ?? '');
+    final passwordCtrl = TextEditingController(); // Nuevo para la contraseña
+    
+    final SignatureController signatureController = SignatureController(
+      penStrokeWidth: 2,
+      penColor: Colors.black,
     );
-    _loadEmployees();
+    
+    String? currentSignatureUrl = employee?.signatureUrl;
+    Uint8List? pickedSignatureBytes;
+    bool isSaving = false; 
+    bool isAdmin = employee?.isAdmin ?? false; // Estado del switch
+    final ImagePicker picker = ImagePicker();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, 
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          
+          Future<void> pickImage(ImageSource source) async {
+            try {
+              final XFile? image = await picker.pickImage(source: source, maxWidth: 800);
+              if (image != null) {
+                final bytes = await image.readAsBytes();
+                setStateDialog(() {
+                  pickedSignatureBytes = bytes;
+                  currentSignatureUrl = null; 
+                });
+              }
+            } catch (e) {
+              print("Error seleccionando imagen: $e");
+            }
+          }
+
+          return AlertDialog(
+            title: Text(employee == null ? 'Nuevo Empleado' : 'Editar Empleado'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.8,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- SWITCH DE ADMINISTRADOR ---
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isAdmin ? Colors.green.shade50 : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: isAdmin ? Colors.green : Colors.grey.shade300)
+                      ),
+                      child: SwitchListTile(
+                        title: const Text("¿Es Administrador del Sistema?", 
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: const Text("Tendrá acceso al módulo de Empleados", style: TextStyle(fontSize: 11)),
+                        value: isAdmin,
+                        activeColor: Colors.green,
+                        onChanged: isSaving ? null : (val) {
+                          setStateDialog(() {
+                            isAdmin = val;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    TextFormField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre Completo',
+                        icon: Icon(Icons.person),
+                      ),
+                      enabled: !isSaving,
+                    ),
+                    const SizedBox(height: 15),
+                    
+                    TextFormField(
+                      controller: emailCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Correo Electrónico',
+                        hintText: 'ejemplo@fruver.com.mx',
+                        icon: Icon(Icons.email),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      enabled: !isSaving,
+                    ),
+
+                    // --- CONTRASEÑA SÓLO SI ES NUEVO ---
+                    if (employee == null) ...[
+                      const SizedBox(height: 15),
+                      TextFormField(
+                        controller: passwordCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Contraseña de Acceso',
+                          hintText: 'Mínimo 6 caracteres',
+                          icon: Icon(Icons.lock),
+                        ),
+                        enabled: !isSaving,
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 40, top: 5),
+                        child: Text(
+                          "Ojo: Crear la cuenta cerrará tu sesión actual de administrador. Tendrás que volver a entrar.",
+                          style: TextStyle(color: Colors.orange, fontSize: 11, fontStyle: FontStyle.italic),
+                        ),
+                      )
+                    ],
+                    
+                    const SizedBox(height: 20),
+                    const Text('Firma del Empleado', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+
+                    // Área de firma
+                    Container(
+                      height: 150,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.grey[200],
+                      ),
+                      child: pickedSignatureBytes != null
+                          ? Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.memory(pickedSignatureBytes!, fit: BoxFit.contain),
+                                if (!isSaving)
+                                  Positioned(
+                                    right: 0,
+                                    top: 0,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, color: Colors.red),
+                                      onPressed: () => setStateDialog(() => pickedSignatureBytes = null),
+                                    ),
+                                  )
+                              ],
+                            )
+                          : (currentSignatureUrl != null && currentSignatureUrl!.isNotEmpty)
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.network(
+                                      currentSignatureUrl!, 
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (context, error, stackTrace) => const Center(child: Text("Error al cargar firma")),
+                                    ),
+                                    if (!isSaving)
+                                      Positioned(
+                                        right: 0,
+                                        top: 0,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.close, color: Colors.red),
+                                          onPressed: () => setStateDialog(() => currentSignatureUrl = null),
+                                        ),
+                                      )
+                                  ],
+                                )
+                              : Signature(
+                                  controller: signatureController,
+                                  backgroundColor: Colors.transparent,
+                                ),
+                    ),
+
+                    if (!isSaving && pickedSignatureBytes == null && (currentSignatureUrl == null || currentSignatureUrl!.isEmpty))
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                  icon: const Icon(Icons.camera_alt, color: Colors.blue),
+                                  onPressed: () => pickImage(ImageSource.camera)),
+                              IconButton(
+                                  icon: const Icon(Icons.photo_library, color: Colors.blue),
+                                  onPressed: () => pickImage(ImageSource.gallery)),
+                            ],
+                          ),
+                          TextButton.icon(
+                            onPressed: () => signatureController.clear(),
+                            icon: const Icon(Icons.clear, size: 16),
+                            label: const Text('Limpiar Dibujo'),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              if (!isSaving)
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancelar')),
+              ElevatedButton(
+                onPressed: isSaving ? null : () async {
+                  if (nameCtrl.text.isEmpty) return;
+
+                  // Validación para nuevos usuarios
+                  if (employee == null && emailCtrl.text.isNotEmpty && passwordCtrl.text.length < 6) {
+                     ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('La contraseña debe tener mínimo 6 caracteres'))
+                     );
+                     return;
+                  }
+
+                  setStateDialog(() {
+                    isSaving = true;
+                  });
+
+                  Uint8List? finalBytes = pickedSignatureBytes;
+                  if (finalBytes == null && signatureController.isNotEmpty) {
+                    finalBytes = await signatureController.toPngBytes();
+                  }
+
+                  final empData = Employee(
+                    id: employee?.id,
+                    name: nameCtrl.text,
+                    email: emailCtrl.text.isEmpty ? null : emailCtrl.text.trim(),
+                    signatureUrl: currentSignatureUrl, 
+                    isAdmin: isAdmin, // Guardamos el rol
+                  );
+
+                  try {
+                    await _supabaseService.saveEmployee(
+                      empData, 
+                      finalBytes,
+                      password: passwordCtrl.text.isNotEmpty ? passwordCtrl.text : null
+                    );
+                    
+                    if (mounted) _loadEmployees();
+                    if (ctx.mounted) Navigator.pop(ctx);
+
+                    // Si creó una cuenta, el sistema de auth pudo haberlo cerrado
+                    if (employee == null && passwordCtrl.text.isNotEmpty) {
+                      if (mounted) {
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           const SnackBar(
+                             content: Text('Empleado guardado. Si el sistema te sacó, vuelve a iniciar sesión como admin.'),
+                             duration: Duration(seconds: 5),
+                           )
+                         );
+                      }
+                    }
+
+                  } catch (e) {
+                    setStateDialog(() {
+                      isSaving = false;
+                    });
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")))
+                      );
+                    }
+                  }
+                },
+                child: isSaving 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : const Text('Guardar'),
+              ),
+            ],
+          );
+        }
+      ),
+    ).then((_) {
+      signatureController.dispose();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Empleados')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToForm(),
-        child: const Icon(Icons.add),
+      appBar: AppBar(
+        title: const Text('Directorio de Empleados'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _employees.isEmpty
-              ? const Center(child: Text('No hay empleados registrados'))
+              ? const Center(child: Text('No hay empleados registrados.'))
               : ListView.builder(
                   itemCount: _employees.length,
                   itemBuilder: (context, index) {
@@ -83,28 +359,39 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.all(10),
+                        leading: CircleAvatar(
+                          backgroundColor: emp.isAdmin ? Colors.orange.shade100 : Colors.green.shade50,
+                          child: Icon(
+                            emp.isAdmin ? Icons.admin_panel_settings : Icons.badge, 
+                            color: emp.isAdmin ? Colors.orange : Colors.green
+                          ),
+                        ),
                         title: Text(emp.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: emp.signatureUrl != null
-                            ? const Text('Firma registrada', style: TextStyle(color: Colors.green))
-                            : const Text('Sin firma', style: TextStyle(color: Colors.red)),
-                        leading: emp.signatureUrl != null
-                            ? Container(
-                                width: 60,
-                                color: Colors.grey[200],
-                                child: Image.network(emp.signatureUrl!, fit: BoxFit.contain),
-                              )
-                            : const Icon(Icons.person, size: 40),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              emp.email != null && emp.email!.isNotEmpty 
+                                ? emp.email! 
+                                : '⚠️ Sin correo vinculado',
+                              style: TextStyle(
+                                color: emp.email != null && emp.email!.isNotEmpty ? Colors.grey[700] : Colors.redAccent,
+                              ),
+                            ),
+                            if (emp.isAdmin)
+                               const Text("Rol: Administrador", style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _navigateToForm(employee: emp),
+                              onPressed: () => _showEmployeeDialog(employee: emp),
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteEmployee(emp.id!),
+                              onPressed: () => _deleteEmployee(emp),
                             ),
                           ],
                         ),
@@ -112,224 +399,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     );
                   },
                 ),
-    );
-  }
-}
-
-// --- PANTALLA DE FORMULARIO (VISTA COMPLETA) ---
-class EmployeeFormScreen extends StatefulWidget {
-  final Employee? employee;
-
-  const EmployeeFormScreen({super.key, this.employee});
-
-  @override
-  State<EmployeeFormScreen> createState() => _EmployeeFormScreenState();
-}
-
-class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
-  final _nameController = TextEditingController();
-  final SignatureController _signatureController = SignatureController(penStrokeWidth: 3, penColor: Colors.black);
-  final SupabaseService _service = SupabaseService();
-  final ImagePicker _picker = ImagePicker(); // Selector de imagen
-  
-  bool _isSaving = false;
-  String? _existingSignatureUrl;
-  Uint8List? _uploadedSignatureBytes; // Variable para almacenar la imagen subida
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.employee != null) {
-      _nameController.text = widget.employee!.name;
-      _existingSignatureUrl = widget.employee!.signatureUrl;
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _signatureController.dispose();
-    super.dispose();
-  }
-
-  // --- Lógica para seleccionar imagen ---
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800, // Reducir tamaño para que no pese tanto
-      );
-      
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        setState(() {
-          _uploadedSignatureBytes = bytes;
-          _signatureController.clear(); // Si sube imagen, limpiamos el pad
-          _existingSignatureUrl = null; // Ocultamos la firma vieja para mostrar la nueva
-        });
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al imagen: $e')));
-    }
-  }
-
-  Future<void> _save() async {
-    if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El nombre es obligatorio')));
-      return;
-    }
-
-    // Validar si hay firma (ya sea dibujada, subida o existente)
-    bool hasSignature = _signatureController.isNotEmpty || 
-                        _uploadedSignatureBytes != null || 
-                        (_existingSignatureUrl != null && widget.employee?.signatureUrl != null);
-
-    if (!hasSignature) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La firma es obligatoria (Dibuja o Sube imagen)')));
-      return;
-    }
-
-    setState(() => _isSaving = true);
-
-    try {
-      Uint8List? signatureBytes;
-      
-      // PRIORIDAD: 
-      // 1. Imagen subida
-      // 2. Firma dibujada
-      if (_uploadedSignatureBytes != null) {
-        signatureBytes = _uploadedSignatureBytes;
-      } else if (_signatureController.isNotEmpty) {
-        signatureBytes = await _signatureController.toPngBytes();
-      }
-
-      final newEmployee = Employee(
-        id: widget.employee?.id,
-        name: _nameController.text.toUpperCase(),
-        // Si no subió nada nuevo, mantenemos la URL vieja (si la borró, será null)
-        signatureUrl: (_uploadedSignatureBytes == null && _signatureController.isEmpty) 
-            ? _existingSignatureUrl 
-            : null, 
-      );
-
-      await _service.saveEmployee(newEmployee, signatureBytes);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Empleado guardado')));
-        Navigator.pop(context); 
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.employee == null ? 'Nuevo Empleado' : 'Editar Empleado'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _nameController,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(labelText: 'Nombre Completo', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 20),
-              
-              const Text('Firma:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 10),
-              
-              // --- ZONA VISUAL DE FIRMA ---
-              Container(
-                height: 250,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  color: Colors.grey[100],
-                ),
-                child: Stack(
-                  children: [
-                    // A. Mostrar imagen SUBIDA manualmente
-                    if (_uploadedSignatureBytes != null)
-                      Center(child: Image.memory(_uploadedSignatureBytes!, fit: BoxFit.contain)),
-
-                    // B. Mostrar firma EXISTENTE de la nube
-                    if (_existingSignatureUrl != null && _uploadedSignatureBytes == null)
-                      Center(child: Image.network(_existingSignatureUrl!)),
-                    
-                    // C. Pad para DIBUJAR (Solo si no hay imagen subida)
-                    if (_uploadedSignatureBytes == null && _existingSignatureUrl == null)
-                      Signature(
-                        controller: _signatureController,
-                        backgroundColor: Colors.transparent,
-                        height: 250,
-                        width: double.infinity,
-                      ),
-                      
-                    // Botón BORRAR (Limpia todo)
-                    Positioned(
-                      right: 10,
-                      top: 10,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.white,
-                        child: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          tooltip: 'Borrar firma y empezar de nuevo',
-                          onPressed: () {
-                            setState(() {
-                              _existingSignatureUrl = null;
-                              _uploadedSignatureBytes = null;
-                              _signatureController.clear();
-                            });
-                          },
-                        ),
-                      ),
-                    )
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 10),
-
-              // --- BOTÓN PARA SUBIR IMAGEN ---
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.upload_file),
-                      label: const Text('Subir Imagen de Firma'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey.shade100,
-                        foregroundColor: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 30),
-              
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _save,
-                  icon: const Icon(Icons.save),
-                  label: _isSaving ? const Text('Guardando...') : const Text('GUARDAR EMPLEADO'),
-                ),
-              ),
-            ],
-          ),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showEmployeeDialog(),
+        child: const Icon(Icons.person_add),
       ),
     );
   }
