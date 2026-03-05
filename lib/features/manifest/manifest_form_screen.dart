@@ -68,6 +68,7 @@ class ManifestFormScreen extends StatefulWidget {
 }
 
 class _ManifestFormScreenState extends State<ManifestFormScreen> {
+  String _usuarioLogueado = 'Usuario';
   int _currentStep = 0;
   final int _totalSteps = 8; 
   
@@ -143,17 +144,24 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       setState(() {
         _addProducerSection(); 
       });
-      _loadCurrentEmployee(); 
     }
+    // ¡AQUÍ ESTÁ LA MAGIA! Lo llamamos siempre para atrapar el nombre real.
+    _loadCurrentEmployee(); 
   }
 
   Future<void> _loadCurrentEmployee() async {
     final emp = await _supabaseService.getCurrentEmployee();
     if (emp != null && mounted) {
       setState(() {
-        _embarcoNombreController.text = emp.name;
-        if (emp.signatureUrl != null) {
-          _embarcoFirmaUrl = emp.signatureUrl;
+        // Guardamos su nombre real en la memoria de la pantalla
+        _usuarioLogueado = emp.name; 
+        
+        // Solo si es un manifiesto NUEVO, autocompletamos el nombre en "Embarcó"
+        if (widget.manifest == null) {
+          _embarcoNombreController.text = emp.name;
+          if (emp.signatureUrl != null) {
+            _embarcoFirmaUrl = emp.signatureUrl;
+          }
         }
       });
     }
@@ -686,7 +694,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         evidencePhotosBytes: _evidencePhotos,
       );
 
-      final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf);
+      final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf, nombreUsuario: _usuarioLogueado);
       final fileName = 'manifiesto-${savedManifest.id}.pdf';
       final pdfUrl = await _supabaseService.uploadPdf(pdfBytes, fileName);
       if (pdfUrl != null) {
@@ -1614,7 +1622,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                             _trailerLayoutControllers[index]?.text = _bulkTextController.text;
                           }
                           
-                          // --- LA MEJORA: LIMPIAR AL APLICAR ---
+                          // Limpiar al aplicar
                           _selectedIndices.clear();
                           _bulkTextController.clear();
                           
@@ -1633,9 +1641,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
         ),
 
-        Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [Text('DIFUSOR'), Text('PUERTAS')]),
+        // --- TITULO SUPERIOR CENTRADO ---
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 12.0),
+          child: Text(
+            'DIFUSOR', 
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 2.0)
+          ),
+        ),
         
         GridView.builder(
           shrinkWrap: true,
@@ -1693,6 +1706,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 ),
                 textAlign: TextAlign.center);
           },
+        ),
+
+        // --- TITULO INFERIOR CENTRADO ---
+        const Padding(
+          padding: EdgeInsets.only(top: 16.0, bottom: 8.0),
+          child: Text(
+            'PUERTAS', 
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 2.0)
+          ),
         ),
       ],
     );

@@ -40,6 +40,8 @@ class SupabaseService {
 
     try {
       print('🌐 Iniciando sincronización de ${pending.length} manifiestos offline...');
+      final currentEmp = await getCurrentEmployee();
+      final usuarioSincronizador = currentEmp?.name ?? 'Sincronización Automática';
 
       for (int i = pending.length - 1; i >= 0; i--) {
         try {
@@ -94,7 +96,7 @@ class SupabaseService {
           savedManifest.evidencePhotosBytes = evidencePhotosBytes;
 
           // 5. Generar PDF Oficial
-          final pdfBytes = await PdfGenerator.generatePdfBytes(savedManifest);
+          final pdfBytes = await PdfGenerator.generatePdfBytes(savedManifest, nombreUsuario: usuarioSincronizador);
           final fileName = 'manifiesto-${savedManifest.id}.pdf';
           final pdfPath = 'pdfs/$fileName';
           

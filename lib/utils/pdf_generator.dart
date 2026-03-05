@@ -4,7 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class PdfGenerator {
-  static Future<Uint8List> generatePdfBytes(ManifestData data) async {
+  static Future<Uint8List> generatePdfBytes(ManifestData data, {String? nombreUsuario}) async {
     final pdf = pw.Document();
 
     // 1. CARGAMOS ROBOTO (Para todo el documento)
@@ -90,8 +90,7 @@ class PdfGenerator {
                 children: [
                   _buildSignatureSection(context, data),
                   pw.SizedBox(height: 15),
-                  pw.Text(
-                    'Generado por: ${data.embarcoNombre}', 
+                  pw.Text('Generado por: ${nombreUsuario ?? data.embarcoNombre}',
                     style: pw.TextStyle(
                       fontSize: 7, 
                       color: PdfColors.grey700, 
