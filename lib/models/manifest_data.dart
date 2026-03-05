@@ -29,14 +29,14 @@ class ManifestData {
   final Map<String, String> trailerLayout;
   
   // Firmas
-  final Uint8List? embarcoFirmaBytes;
-  final Uint8List? recibioFirmaBytes;
+  Uint8List? embarcoFirmaBytes;
+  Uint8List? recibioFirmaBytes;
   final String? embarcoFirmaUrl;
   final String? recibioFirmaUrl;
 
   // Evidencia
-  final List<String>? evidencePhotosUrls;
-  final List<Uint8List>? evidencePhotosBytes;
+  List<String>? evidencePhotosUrls;
+  List<Uint8List>? evidencePhotosBytes;
   
   final String? pdfUrl;
 

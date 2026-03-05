@@ -14,10 +14,12 @@ import 'package:manifiestos_app/features/operators/operator_form_screen.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/features/clients/client_form_screen.dart';
 import 'package:manifiestos_app/models/client.dart';
-
+import 'package:manifiestos_app/services/local_db_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await LocalDbService.init();
 
   // --- 2. CÓDIGO PARA BLOQUEAR LA ROTACIÓN ---
   // Esto obliga a la app a mantenerse siempre en vertical

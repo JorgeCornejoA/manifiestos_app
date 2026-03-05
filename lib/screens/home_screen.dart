@@ -1,11 +1,53 @@
+import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:manifiestos_app/features/employees/employees_screen.dart';
 import 'package:manifiestos_app/features/company_trailers/company_trailers_screen.dart'; 
+import 'package:manifiestos_app/services/supabase_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool isAdmin = false;
+  late StreamSubscription<ConnectivityResult> _connectivitySubscription; // <--- EL RADAR
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdmin();
+    
+    // 1. Revisar al abrir la pantalla
+    SupabaseService().syncPendingManifests();
+
+    // 2. Encender el radar en tiempo real
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      if (result != ConnectivityResult.none) {
+        // ¡Detectó que regresó el internet! Dispara la sincronización silenciosa
+        SupabaseService().syncPendingManifests();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Apagamos el radar si cerramos la app para ahorrar batería
+    _connectivitySubscription.cancel();
+    super.dispose();
+  }
+
+  void _checkAdmin() {
+    final currentUserEmail = Supabase.instance.client.auth.currentUser?.email;
+    setState(() {
+      isAdmin = currentUserEmail == 'soporte@fruver.com.mx';
+    });
+  }
 
   Future<void> _signOut(BuildContext context) async {
     final bool? shouldLogout = await showDialog<bool>(
@@ -43,10 +85,6 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- VALIDACIÓN DE ADMINISTRADOR ---
-    final currentUserEmail = Supabase.instance.client.auth.currentUser?.email;
-    final isAdmin = currentUserEmail == 'soporte@fruver.com.mx';
-
     final menuItems = [
       _MenuItem(
         title: 'Nuevo Manifiesto',
@@ -87,7 +125,6 @@ class HomeScreen extends StatelessWidget {
       ),
     ];
 
-    // SOLO SI ES ADMIN SE AGREGA EL BOTÓN DE EMPLEADOS
     if (isAdmin) {
       menuItems.add(
         _MenuItem(

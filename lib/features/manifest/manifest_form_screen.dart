@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:typed_data'; 
 import 'package:http/http.dart' as http; 
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:manifiestos_app/utils/pdf_generator.dart';
@@ -551,17 +552,25 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   Future<Uint8List?> _downloadBytesFromUrl(String url) async {
     try {
+      // 1. Extraemos la ruta interna limpia desde la URL larga
+      // Ej: https://.../manifests/signatures/123.png -> signatures/123.png
       final uri = Uri.parse(url);
-      final response = await http.get(uri);
-
-      if (response.statusCode == 200) {
-        return response.bodyBytes; 
-      } else {
-        debugPrint('Error descarga: ${response.statusCode}');
-        return null;
+      final pathSegments = uri.pathSegments;
+      final bucketIndex = pathSegments.indexOf('manifests');
+      
+      if (bucketIndex != -1 && bucketIndex + 1 < pathSegments.length) {
+        final internalPath = pathSegments.sublist(bucketIndex + 1).join('/');
+        
+        // 2. Descargamos usando el cliente oficial de Supabase en lugar de 'http'
+        final bytes = await Supabase.instance.client.storage
+            .from('manifests')
+            .download(internalPath);
+            
+        return bytes;
       }
+      return null;
     } catch (e) {
-      debugPrint('Excepción al descargar: $e');
+      debugPrint('Excepción al descargar imagen con Supabase: $e');
       return null;
     }
   }

@@ -136,7 +136,10 @@ class PdfGenerator {
     final headerTextStyle = pw.TextStyle(
         color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10);
 
-    final folioString = (data.folio ?? 0).toString().padLeft(5, '0');
+    // Si el folio es 0 o null (modo offline), escribimos PENDIENTE. Si no, su número de 5 dígitos.
+    final folioString = (data.folio == null || data.folio == 0) 
+        ? 'PENDIENTE' 
+        : data.folio!.toString().padLeft(5, '0');
 
     final isTrailer = data.tipo == 'T';
     final labelText = isTrailer ? 'TRAILER No.' : 'ENTRADA ALM. No.';
