@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- IMPORTANTE PARA EL FORMATO
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
@@ -74,7 +75,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   void _showEmployeeDialog({Employee? employee}) {
     final nameCtrl = TextEditingController(text: employee?.name ?? '');
     final emailCtrl = TextEditingController(text: employee?.email ?? '');
-    final passwordCtrl = TextEditingController(); // Nuevo para la contraseña
+    final passwordCtrl = TextEditingController(); 
     
     final SignatureController signatureController = SignatureController(
       penStrokeWidth: 2,
@@ -84,7 +85,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     String? currentSignatureUrl = employee?.signatureUrl;
     Uint8List? pickedSignatureBytes;
     bool isSaving = false; 
-    bool isAdmin = employee?.isAdmin ?? false; // Estado del switch
+    bool isAdmin = employee?.isAdmin ?? false; 
     final ImagePicker picker = ImagePicker();
 
     showDialog(
@@ -141,6 +142,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
                     TextFormField(
                       controller: nameCtrl,
+                      textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                      inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                       decoration: const InputDecoration(
                         labelText: 'Nombre Completo',
                         icon: Icon(Icons.person),
@@ -271,7 +274,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 onPressed: isSaving ? null : () async {
                   if (nameCtrl.text.isEmpty) return;
 
-                  // Validación para nuevos usuarios
                   if (employee == null && emailCtrl.text.isNotEmpty && passwordCtrl.text.length < 6) {
                      ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(content: Text('La contraseña debe tener mínimo 6 caracteres'))
@@ -293,7 +295,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     name: nameCtrl.text,
                     email: emailCtrl.text.isEmpty ? null : emailCtrl.text.trim(),
                     signatureUrl: currentSignatureUrl, 
-                    isAdmin: isAdmin, // Guardamos el rol
+                    isAdmin: isAdmin, 
                   );
 
                   try {
@@ -306,7 +308,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     if (mounted) _loadEmployees();
                     if (ctx.mounted) Navigator.pop(ctx);
 
-                    // Si creó una cuenta, el sistema de auth pudo haberlo cerrado
                     if (employee == null && passwordCtrl.text.isNotEmpty) {
                       if (mounted) {
                          ScaffoldMessenger.of(context).showSnackBar(
@@ -403,6 +404,17 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         onPressed: () => _showEmployeeDialog(),
         child: const Icon(Icons.person_add),
       ),
+    );
+  }
+}
+
+// --- CLASE MÁGICA PARA FORZAR MAYÚSCULAS ---
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

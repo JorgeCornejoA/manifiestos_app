@@ -176,18 +176,29 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                         itemBuilder: (context, index) {
                           final manifest = _foundManifests[index];
                           final hasPdf = manifest.pdfUrl != null && manifest.pdfUrl!.isNotEmpty;
+                          
+                          // --- NUEVA LÓGICA: Determinar Tipo ---
+                          final bool isEntrada = manifest.tipo == 'EA';
+                          final String prefijo = isEntrada ? 'EA' : 'T';
+                          final String titulo = isEntrada ? 'Entrada Alm.:' : 'Trailer:';
+                          // Color diferente en el ícono para distinguirlos más rápido visualmente
+                          final Color avatarColor = isEntrada ? Colors.orange.shade100 : Colors.blue.shade100;
 
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: Colors.blue.shade100,
+                                backgroundColor: avatarColor,
                                 child: Text(
-                                  manifest.trailerNo.isNotEmpty ? manifest.trailerNo.substring(0, 1) : '#',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  prefijo, // Mostrará 'T' o 'EA'
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                 ),
                               ),
-                              title: Text('Trailer: ${manifest.trailerNo}'),
+                              // Mostrará 'Trailer: T-123' o 'Entrada Alm.: EA-123'
+                              title: Text(
+                                '$titulo $prefijo-${manifest.trailerNo}', 
+                                style: const TextStyle(fontWeight: FontWeight.bold)
+                              ),
                               subtitle: Text('${manifest.fecha}\n${manifest.consignadoA}'),
                               isThreeLine: true,
                               trailing: Row(

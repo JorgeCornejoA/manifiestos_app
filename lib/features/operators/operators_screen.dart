@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- IMPORTANTE PARA EL FORMATO
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 
@@ -106,7 +107,6 @@ class _OperatorsScreenState extends State<OperatorsScreen> {
                         setStateDialog(() {
                           isLocal = val;
                           if (isLocal) {
-                            // Limpiamos los campos al cambiar a local
                             trailerCtrl.clear();
                             placasCtrl.clear();
                             cajaCtrl.clear();
@@ -120,20 +120,20 @@ class _OperatorsScreenState extends State<OperatorsScreen> {
 
                   TextFormField(
                     controller: nameCtrl,
+                    textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                    inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                     decoration: const InputDecoration(labelText: 'Nombre Completo'),
                   ),
                   const SizedBox(height: 10),
                   
                   const Divider(),
 
-                  // --- AQUÍ ESTÁ LA MAGIA DEL TAMAÑO FIJO ---
                   Stack(
                     alignment: Alignment.center,
                     children: [
-                      // CAPA 1: Los campos del vehículo (Invisibles pero ocupando espacio)
                       Visibility(
-                        visible: !isLocal, // Solo visibles si NO es local
-                        maintainSize: true, // ¡IMPORTANTE! Mantener tamaño
+                        visible: !isLocal, 
+                        maintainSize: true, 
                         maintainAnimation: true,
                         maintainState: true,
                         child: Column(
@@ -147,28 +147,35 @@ class _OperatorsScreenState extends State<OperatorsScreen> {
                               children: [
                                 Expanded(child: TextFormField(
                                   controller: trailerCtrl, 
+                                  textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                                  inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                                   decoration: const InputDecoration(labelText: 'Trailer')
                                 )),
                                 const SizedBox(width: 10),
                                 Expanded(child: TextFormField(
                                   controller: placasCtrl, 
+                                  textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                                  inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                                   decoration: const InputDecoration(labelText: 'Placas')
                                 )),
                               ],
                             ),
                             TextFormField(
                               controller: cajaCtrl, 
+                              textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                              inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                               decoration: const InputDecoration(labelText: 'Caja')
                             ),
                             TextFormField(
                               controller: lineaCtrl, 
+                              textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                              inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                               decoration: const InputDecoration(labelText: 'Línea Transportista')
                             ),
                           ],
                         ),
                       ),
 
-                      // CAPA 2: El mensaje de nota (Aparece en el espacio vacío)
                       if (isLocal)
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -191,11 +198,12 @@ class _OperatorsScreenState extends State<OperatorsScreen> {
                         ),
                     ],
                   ),
-                  // ----------------------------------------------------
-
+                  
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: telCtrl,
+                    textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                    inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                     decoration: const InputDecoration(labelText: 'Teléfono'),
                     keyboardType: TextInputType.phone,
                   ),
@@ -298,6 +306,17 @@ class _OperatorsScreenState extends State<OperatorsScreen> {
         onPressed: () => _showOperatorDialog(),
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+// --- CLASE MÁGICA PARA FORZAR MAYÚSCULAS ---
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

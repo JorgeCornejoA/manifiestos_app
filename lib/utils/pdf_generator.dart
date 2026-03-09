@@ -19,19 +19,49 @@ class PdfGenerator {
     final logoAsset = await rootBundle.load('assets/images/logo.png');
     final logoImage = pw.MemoryImage(logoAsset.buffer.asUint8List());
 
+    // Obtenemos la hora actual para el PDF
+    final now = DateTime.now();
+    final horaActual = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
     pdf.addPage(
       pw.MultiPage(
         theme: theme,
         pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+        // --- 1. MÁRGENES REDUCIDOS PARA GANAR ESPACIO VERTICAL ---
+        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         build: (context) {
           return [
             // --- ENCABEZADO ---
             _buildHeader(context, logoImage, data),
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 8),
             
+            // --- 2. GENERADO POR Y HORA (En la parte superior) ---
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Generado por: ${nombreUsuario ?? data.embarcoNombre}',
+                  style: pw.TextStyle(
+                    fontSize: 8, 
+                    color: PdfColors.grey700, 
+                    fontStyle: pw.FontStyle.italic,
+                    fontWeight: pw.FontWeight.bold
+                  )
+                ),
+                pw.Text(
+                  'Hora: $horaActual',
+                  style: pw.TextStyle(
+                    fontSize: 8, 
+                    color: PdfColors.grey700, 
+                    fontStyle: pw.FontStyle.italic,
+                    fontWeight: pw.FontWeight.bold
+                  )
+                ),
+              ]
+            ),
+            pw.SizedBox(height: 5),
+
             // --- LA MAGIA: PARTITIONS ---
-            // Esto crea columnas independientes. Si la izquierda es muy larga, pasa de hoja sola.
             pw.Partitions(
               children: [
                 
@@ -81,24 +111,12 @@ class PdfGenerator {
               ]
             ),
 
-            pw.SizedBox(height: 30),
+            // Espacio reducido para no saltar de hoja
+            pw.SizedBox(height: 15), 
 
-            // --- SECCIÓN DE FIRMAS Y GENERADO POR (Bloque irrompible) ---
+            // --- 3. SECCIÓN DE FIRMAS (Limpia y compacta) ---
             pw.Container(
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _buildSignatureSection(context, data),
-                  pw.SizedBox(height: 15),
-                  pw.Text('Generado por: ${nombreUsuario ?? data.embarcoNombre}',
-                    style: pw.TextStyle(
-                      fontSize: 7, 
-                      color: PdfColors.grey700, 
-                      fontStyle: pw.FontStyle.italic
-                    )
-                  ),
-                ]
-              )
+              child: _buildSignatureSection(context, data)
             ),
           ];
         },
@@ -448,28 +466,11 @@ class PdfGenerator {
 
   static pw.Widget _buildSignatureSection(pw.Context context, ManifestData data) {
     return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: pw.MainAxisAlignment.spaceAround, // Ajustado para centrar mejor ambas firmas sin el estorbo de la "Hora"
       crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
         _signatureBox(context, 'EMBARCÓ (NOMBRE Y FIRMA)', data.embarcoNombre, data.embarcoFirmaBytes),
-        
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            _signatureBox(context, 'RECIBIÓ (NOMBRE Y FIRMA)', data.recibioNombre, data.recibioFirmaBytes),
-            
-            pw.SizedBox(width: 10),
-            
-            pw.Column(
-              children: [
-                pw.Container(width: 80, height: 1, color: PdfColors.black),
-                pw.SizedBox(height: 2),
-                pw.Text('HORA:', style: const pw.TextStyle(fontSize: 8)),
-                pw.SizedBox(height: 25), 
-              ],
-            )
-          ],
-        )
+        _signatureBox(context, 'RECIBIÓ (NOMBRE Y FIRMA)', data.recibioNombre, data.recibioFirmaBytes),
       ],
     );
   }
@@ -511,6 +512,8 @@ class PdfGenerator {
 
   static pw.Widget _buildTrailerDiagram(pw.Context context, Map<String, String> layout) {
     final rows = <pw.TableRow>[];
+    const double cellHeight = 35.0; // <--- ALTURA PERFECTA PARA QUE NO HAYA SALTO DE PÁGINA
+
     for (int i = 0; i < 15; i++) {
       final index1 = i * 2;
       final index2 = i * 2 + 1;
@@ -518,29 +521,45 @@ class PdfGenerator {
       rows.add(pw.TableRow(
         verticalAlignment: pw.TableCellVerticalAlignment.middle,
         children: [
-          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index1 + 1}', style: const pw.TextStyle(fontSize: 8))),
-          
+          // Número Izquierdo
           pw.Container(
-            height: 25, 
+            height: cellHeight, // Altura congelada
+            alignment: pw.Alignment.center, 
+            child: pw.Text('${index1 + 1}', style: const pw.TextStyle(fontSize: 8))
+          ),
+          
+          // Contenido Izquierdo (Tarima)
+          pw.Container(
+            height: cellHeight,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2), 
             alignment: pw.Alignment.center, 
             child: pw.Text(
               layout[index1.toString()] ?? '', 
-              style: const pw.TextStyle(fontSize: 8),
-              textAlign: pw.TextAlign.center 
+              style: const pw.TextStyle(fontSize: 8), 
+              textAlign: pw.TextAlign.center,
+              maxLines: 3, // <--- LÍMITE DE 3 RENGLONES EN EL PDF
             )
           ),
           
+          // Contenido Derecho (Tarima)
           pw.Container(
-            height: 25, 
+            height: cellHeight,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2), 
             alignment: pw.Alignment.center, 
             child: pw.Text(
               layout[index2.toString()] ?? '', 
               style: const pw.TextStyle(fontSize: 8),
-              textAlign: pw.TextAlign.center 
+              textAlign: pw.TextAlign.center,
+              maxLines: 3, 
             )
           ),
           
-          pw.Container(height: 25, alignment: pw.Alignment.center, child: pw.Text('${index2 + 1}', style: const pw.TextStyle(fontSize: 8))),
+          // Número Derecho
+          pw.Container(
+            height: cellHeight,
+            alignment: pw.Alignment.center, 
+            child: pw.Text('${index2 + 1}', style: const pw.TextStyle(fontSize: 8))
+          ),
         ],
       ));
     }
@@ -548,7 +567,7 @@ class PdfGenerator {
     return pw.Column(
       children: [
         pw.Text('DIFUSOR', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 4),
         pw.Table(
           border: pw.TableBorder.all(),
           columnWidths: const {
@@ -559,7 +578,7 @@ class PdfGenerator {
           },
           children: rows,
         ),
-        pw.SizedBox(height: 2),
+        pw.SizedBox(height: 4),
         pw.Text('PUERTAS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
       ],
     );

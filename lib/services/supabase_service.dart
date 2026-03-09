@@ -68,16 +68,18 @@ class SupabaseService {
             }
           }
 
-          // 2. Subir Firmas
+          // 2. Subir Firmas (Con Sello de Tiempo anti-caché)
+          final timestamp = DateTime.now().millisecondsSinceEpoch; // El truco
+
           if (embarcoFirmaBytes != null && embarcoFirmaBytes.isNotEmpty) {
             final path = 'signatures/$manifestId/embarco_firma.png';
             await _supabase.storage.from('manifests').uploadBinary(path, embarcoFirmaBytes, fileOptions: const FileOptions(upsert: true));
-            embarcoFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
+            embarcoFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
           }
           if (recibioFirmaBytes != null && recibioFirmaBytes.isNotEmpty) {
             final path = 'signatures/$manifestId/recibio_firma.png';
             await _supabase.storage.from('manifests').uploadBinary(path, recibioFirmaBytes, fileOptions: const FileOptions(upsert: true));
-            recibioFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
+            recibioFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
           }
 
           // 3. Preparar datos
@@ -101,7 +103,9 @@ class SupabaseService {
           final pdfPath = 'pdfs/$fileName';
           
           await _supabase.storage.from('manifests').uploadBinary(pdfPath, pdfBytes, fileOptions: const FileOptions(upsert: true));
-          final pdfUrl = _supabase.storage.from('manifests').getPublicUrl(pdfPath);
+          
+          // El truco en el PDF sincronizado
+          final pdfUrl = '${_supabase.storage.from('manifests').getPublicUrl(pdfPath)}?t=$timestamp';
 
           // 6. Actualizar BD
           await _supabase.from('manifests').update({'pdf_url': pdfUrl}).eq('id', savedManifest.id!);
@@ -148,6 +152,7 @@ class SupabaseService {
       }
 
       // --- MODO ONLINE (CON INTERNET) ---
+      final timestamp = DateTime.now().millisecondsSinceEpoch; // Sello anti-caché
       String? embarcoFirmaUrl = data.embarcoFirmaUrl;
       String? recibioFirmaUrl = data.recibioFirmaUrl;
       List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
@@ -173,14 +178,14 @@ class SupabaseService {
         await _supabase.storage.from('manifests').uploadBinary(
               path, data.embarcoFirmaBytes!, fileOptions: const FileOptions(upsert: true),
             );
-        embarcoFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
+        embarcoFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
       }
       if (data.recibioFirmaBytes != null && data.recibioFirmaBytes!.isNotEmpty) {
         final path = 'signatures/$manifestId/recibio_firma.png';
         await _supabase.storage.from('manifests').uploadBinary(
               path, data.recibioFirmaBytes!, fileOptions: const FileOptions(upsert: true),
             );
-        recibioFirmaUrl = _supabase.storage.from('manifests').getPublicUrl(path);
+        recibioFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
       }
 
       final manifestMap = data.toMap();
@@ -232,7 +237,10 @@ class SupabaseService {
       await _supabase.storage.from('manifests').uploadBinary(
             path, pdfBytes, fileOptions: const FileOptions(upsert: true),
           );
-      return _supabase.storage.from('manifests').getPublicUrl(path);
+          
+      // EL TRUCO: Le pegamos la hora exacta al link para romper la caché del celular
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      return '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
     } catch (e) {
       return null;
     }

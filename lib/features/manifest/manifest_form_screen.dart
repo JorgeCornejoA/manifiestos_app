@@ -9,7 +9,7 @@ import 'package:manifiestos_app/utils/pdf_generator.dart';
 import 'package:printing/printing.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
-
+import 'package:flutter/services.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
@@ -145,7 +145,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         _addProducerSection(); 
       });
     }
-    // ¡AQUÍ ESTÁ LA MAGIA! Lo llamamos siempre para atrapar el nombre real.
     _loadCurrentEmployee(); 
   }
 
@@ -153,10 +152,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     final emp = await _supabaseService.getCurrentEmployee();
     if (emp != null && mounted) {
       setState(() {
-        // Guardamos su nombre real en la memoria de la pantalla
         _usuarioLogueado = emp.name; 
         
-        // Solo si es un manifiesto NUEVO, autocompletamos el nombre en "Embarcó"
         if (widget.manifest == null) {
           _embarcoNombreController.text = emp.name;
           if (emp.signatureUrl != null) {
@@ -560,8 +557,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   Future<Uint8List?> _downloadBytesFromUrl(String url) async {
     try {
-      // 1. Extraemos la ruta interna limpia desde la URL larga
-      // Ej: https://.../manifests/signatures/123.png -> signatures/123.png
       final uri = Uri.parse(url);
       final pathSegments = uri.pathSegments;
       final bucketIndex = pathSegments.indexOf('manifests');
@@ -569,7 +564,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       if (bucketIndex != -1 && bucketIndex + 1 < pathSegments.length) {
         final internalPath = pathSegments.sublist(bucketIndex + 1).join('/');
         
-        // 2. Descargamos usando el cliente oficial de Supabase en lugar de 'http'
         final bytes = await Supabase.instance.client.storage
             .from('manifests')
             .download(internalPath);
@@ -832,6 +826,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       Expanded(
                         child: TextFormField(
                           controller: _trailerNoController,
+                          textCapitalization: TextCapitalization.characters,
+                          inputFormatters: [UpperCaseTextFormatter()],
                           decoration: InputDecoration(
                             labelText: _selectedTipo == 'T' ? 'TRAILER No.' : 'ENTRADA ALMACÉN No.',
                             hintText: '12345',
@@ -884,6 +880,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                                 return TextFormField(
                                   controller: controller,
                                   focusNode: focusNode,
+                                  textCapitalization: TextCapitalization.characters,
+                                  inputFormatters: [UpperCaseTextFormatter()],
                                   decoration: InputDecoration(
                                     labelText: 'PRODUCTOR ${index + 1}',
                                     suffixIcon: const Icon(Icons.search),
@@ -940,6 +938,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       return TextFormField(
                         controller: textEditingController,
                         focusNode: focusNode,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [UpperCaseTextFormatter()],
                         decoration: const InputDecoration(labelText: 'CONSIGNADO A'),
                         textInputAction: TextInputAction.next,
                         validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
@@ -959,6 +959,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   const SizedBox(height: 10),
                   TextFormField(
                       controller: _domicilioController,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [UpperCaseTextFormatter()],
                       decoration: const InputDecoration(labelText: 'DOMICILIO'),
                       readOnly: _domicilioController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
                       textInputAction: TextInputAction.next),
@@ -968,6 +970,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       Expanded(
                         child: TextFormField(
                             controller: _ciudadController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'CIUDAD'),
                             readOnly: _ciudadController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
                             textInputAction: TextInputAction.next),
@@ -976,6 +980,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       Expanded(
                         child: TextFormField(
                             controller: _condicionesController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'CONDICIONES'),
                             textInputAction: TextInputAction.done),
                       ),
@@ -1026,6 +1032,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       return TextFormField(
                         controller: textEditingController,
                         focusNode: focusNode,
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [UpperCaseTextFormatter()],
                         decoration: const InputDecoration(labelText: 'OPERADOR'),
                         textInputAction: TextInputAction.next,
                         validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
@@ -1071,9 +1079,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                               });
                             },
                             fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-                               return TextField(
+                               return TextFormField(
                                  controller: controller,
                                  focusNode: focusNode,
+                                 textCapitalization: TextCapitalization.characters,
+                                 inputFormatters: [UpperCaseTextFormatter()],
                                  decoration: const InputDecoration(
                                    hintText: 'Buscar trailer (ej: 01, T-20)...',
                                    icon: Icon(Icons.local_shipping)
@@ -1093,6 +1103,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         flex: 2,
                         child: TextFormField(
                             controller: _trailerController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'TRAILER'),
                             textInputAction: TextInputAction.next),
                       ),
@@ -1101,6 +1113,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         flex: 2,
                         child: TextFormField(
                             controller: _placasController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'PLACAS'),
                             textInputAction: TextInputAction.next),
                       ),
@@ -1109,6 +1123,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         flex: 2,
                         child: TextFormField(
                             controller: _cajaController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'CAJA'),
                             textInputAction: TextInputAction.next),
                       ),
@@ -1120,6 +1136,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       Expanded(
                         child: TextFormField(
                             controller: _lineaTransportistaController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'LINEA TRANSPORTISTA'),
                             textInputAction: TextInputAction.next),
                       ),
@@ -1127,6 +1145,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       Expanded(
                         child: TextFormField(
                             controller: _telController,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'TEL.'),
                             textInputAction: TextInputAction.next),
                       ),
@@ -1169,6 +1189,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 key: _formKeyStep4,
                 child: TextFormField(
                   controller: _observacionesController,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [UpperCaseTextFormatter()],
                   decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
                   maxLines: 3,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'El campo de observaciones es obligatorio' : null,
@@ -1302,6 +1324,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         TextFormField(
                           controller: controllers.producto,
                           focusNode: controllers.productoNode,
+                          textCapitalization: TextCapitalization.characters,
+                          inputFormatters: [UpperCaseTextFormatter()],
                           decoration: const InputDecoration(labelText: 'Producto'),
                           onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
                           textInputAction: TextInputAction.next,
@@ -1310,12 +1334,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         TextFormField(
                             controller: controllers.etiquetas,
                             focusNode: controllers.etiquetasNode,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'Etiquetas'),
                             onEditingComplete: () => controllers.tamanoNode.requestFocus(),
                             textInputAction: TextInputAction.next),
                         TextFormField(
                             controller: controllers.tamano,
                             focusNode: controllers.tamanoNode,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
                             decoration: const InputDecoration(labelText: 'Tamaño'),
                             onEditingComplete: () => controllers.palletsNode.requestFocus(),
                             textInputAction: TextInputAction.next),
@@ -1524,6 +1552,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               return TextFormField(
                 controller: textEditingController,
                 focusNode: focusNode,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [UpperCaseTextFormatter()],
                 decoration: const InputDecoration(labelText: 'Nombre'),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -1540,6 +1570,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         else
           TextFormField(
             controller: nameController,
+            textCapitalization: TextCapitalization.characters,
+            inputFormatters: [UpperCaseTextFormatter()],
             decoration: const InputDecoration(labelText: 'Nombre'),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -1607,6 +1639,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     Expanded(
                       child: TextFormField(
                         controller: _bulkTextController,
+                        textCapitalization: TextCapitalization.characters, 
+                        inputFormatters: [UpperCaseTextFormatter()], 
                         decoration: const InputDecoration(
                           labelText: 'Texto para aplicar',
                           hintText: 'Ej. TOMATE',
@@ -1621,8 +1655,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                           for (int index in _selectedIndices) {
                             _trailerLayoutControllers[index]?.text = _bulkTextController.text;
                           }
-                          
-                          // Limpiar al aplicar
                           _selectedIndices.clear();
                           _bulkTextController.clear();
                           
@@ -1641,7 +1673,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
         ),
 
-        // --- TITULO SUPERIOR CENTRADO ---
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 12.0),
           child: Text(
@@ -1655,7 +1686,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              childAspectRatio: 3,
+              childAspectRatio: 1.8, 
               crossAxisSpacing: 4,
               mainAxisSpacing: 4),
           itemCount: 30,
@@ -1684,13 +1715,23 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   alignment: Alignment.center,
+                  padding: const EdgeInsets.all(4),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text('${index + 1}', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
                       if (controller!.text.isNotEmpty)
-                        Text(controller.text, 
-                          style: const TextStyle(fontWeight: FontWeight.bold, overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              controller.text, 
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                              textAlign: TextAlign.center,
+                              maxLines: 3, 
+                              overflow: TextOverflow.ellipsis, 
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1699,16 +1740,34 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
             return TextFormField(
                 controller: controller,
+                expands: true, 
+                maxLines: null, 
+                minLines: null, 
+                textAlignVertical: TextAlignVertical.center,
+                keyboardType: TextInputType.multiline, 
+                textCapitalization: TextCapitalization.characters, 
+                inputFormatters: [
+                  LengthLimitingTextInputFormatter(33), 
+                  TextInputFormatter.withFunction((oldValue, newValue) {
+                    int newLines = newValue.text.split('\n').length;
+                    if (newLines > 3) return oldValue; 
+                    
+                    return TextEditingValue(
+                      text: newValue.text.toUpperCase(),
+                      selection: newValue.selection,
+                    );
+                  }),
+                ],
                 decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     labelText: '${index + 1}',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8) 
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4) 
                 ),
+                style: const TextStyle(fontSize: 13),
                 textAlign: TextAlign.center);
           },
         ),
 
-        // --- TITULO INFERIOR CENTRADO ---
         const Padding(
           padding: EdgeInsets.only(top: 16.0, bottom: 8.0),
           child: Text(
@@ -1717,6 +1776,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

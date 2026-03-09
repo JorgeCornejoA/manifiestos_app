@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- IMPORTANTE PARA EL FORMATO
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 
@@ -57,7 +58,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
 
     if (confirm == true && client.id != null) {
       try {
-        await _supabaseService.deleteClient(client.id!); // O client.id.toString() si en tu BD es int
+        await _supabaseService.deleteClient(client.id!); 
         _loadClients();
       } catch (e) {
         if (mounted) {
@@ -77,19 +78,21 @@ class _ClientsScreenState extends State<ClientsScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // Evita que se cierre tocando fuera mientras guarda
+      barrierDismissible: false, 
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
             title: Text(client == null ? 'Nuevo Cliente' : 'Editar Cliente'),
             content: SingleChildScrollView(
               child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8, // Fija el ancho del modal
+                width: MediaQuery.of(context).size.width * 0.8, 
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
                       controller: nameCtrl,
+                      textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                      inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                       decoration: const InputDecoration(
                         labelText: 'Nombre / Consignado A',
                         icon: Icon(Icons.business),
@@ -99,6 +102,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: domicilioCtrl,
+                      textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                      inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                       decoration: const InputDecoration(
                         labelText: 'Domicilio',
                         icon: Icon(Icons.location_on),
@@ -108,6 +113,8 @@ class _ClientsScreenState extends State<ClientsScreen> {
                     const SizedBox(height: 10),
                     TextFormField(
                       controller: ciudadCtrl,
+                      textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                      inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                       decoration: const InputDecoration(
                         labelText: 'Ciudad',
                         icon: Icon(Icons.location_city),
@@ -127,14 +134,12 @@ class _ClientsScreenState extends State<ClientsScreen> {
                 onPressed: isSaving ? null : () async {
                   if (nameCtrl.text.isEmpty) return;
 
-                  // Activamos el estado de carga
                   setStateDialog(() {
                     isSaving = true;
                   });
 
-                  // Creamos el objeto cliente con los datos del formulario
                   final clientData = Client(
-                    id: client?.id, // Mantiene el ID si es edición
+                    id: client?.id, 
                     name: nameCtrl.text,
                     domicilio: domicilioCtrl.text,
                     ciudad: ciudadCtrl.text,
@@ -220,9 +225,20 @@ class _ClientsScreenState extends State<ClientsScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showClientDialog(), // Llama a la función sin parámetros para Crear
+        onPressed: () => _showClientDialog(), 
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+// --- CLASE MÁGICA PARA FORZAR MAYÚSCULAS ---
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

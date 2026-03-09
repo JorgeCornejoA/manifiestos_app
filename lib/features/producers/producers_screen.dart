@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- IMPORTANTE PARA EL FORMATO
 import 'package:manifiestos_app/models/producer.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 
@@ -23,7 +24,6 @@ class _ProducersScreenState extends State<ProducersScreen> {
   Future<void> _loadProducers() async {
     setState(() => _isLoading = true);
     try {
-      // getProducers devuelve List<Map<String, dynamic>>, lo mapeamos a nuestro modelo
       final data = await _supabaseService.getProducers();
       setState(() {
         _producers = data.map((map) => Producer.fromMap(map)).toList();
@@ -58,7 +58,7 @@ class _ProducersScreenState extends State<ProducersScreen> {
 
     if (confirm == true && producer.id != null) {
       try {
-        await _supabaseService.deleteProducer(producer.id!); // Pasamos el ID int
+        await _supabaseService.deleteProducer(producer.id!); 
         _loadProducers();
       } catch (e) {
         if (mounted) {
@@ -75,25 +75,26 @@ class _ProducersScreenState extends State<ProducersScreen> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // Evita que se cierre tocando fuera mientras guarda
+      barrierDismissible: false, 
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           return AlertDialog(
             title: Text(producer == null ? 'Nuevo Productor' : 'Editar Productor'),
             content: SingleChildScrollView(
               child: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8, // Fija el ancho del modal
+                width: MediaQuery.of(context).size.width * 0.8, 
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
                       controller: nameCtrl,
+                      textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+                      inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
                       decoration: const InputDecoration(
                         labelText: 'Nombre del Productor',
                         icon: Icon(Icons.agriculture),
                       ),
                       enabled: !isSaving,
-                      textCapitalization: TextCapitalization.words,
                     ),
                   ],
                 ),
@@ -114,10 +115,8 @@ class _ProducersScreenState extends State<ProducersScreen> {
 
                   try {
                     if (producer == null) {
-                      // CREAR
                       await _supabaseService.saveProducer(nameCtrl.text.trim());
                     } else {
-                      // EDITAR
                       await _supabaseService.updateProducer(producer.id!, nameCtrl.text.trim());
                     }
                     
@@ -170,12 +169,10 @@ class _ProducersScreenState extends State<ProducersScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Botón Editar
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
                               onPressed: () => _showProducerDialog(producer: p),
                             ),
-                            // Botón Eliminar
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () => _deleteProducer(p),
@@ -187,9 +184,20 @@ class _ProducersScreenState extends State<ProducersScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showProducerDialog(), // Sin parámetros para crear nuevo
+        onPressed: () => _showProducerDialog(), 
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+// --- CLASE MÁGICA PARA FORZAR MAYÚSCULAS ---
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

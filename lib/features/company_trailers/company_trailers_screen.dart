@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- IMPORTANTE PARA EL FORMATO
 import 'package:manifiestos_app/models/company_trailer.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 
@@ -61,7 +62,6 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
     }
   }
 
-  // --- MODIFICADO: ACEPTA UN TRAILER PARA EDITAR ---
   void _showTrailerDialog({CompanyTrailer? trailerToEdit}) {
     final nameCtrl = TextEditingController(text: trailerToEdit?.name ?? '');
     final plateCtrl = TextEditingController(text: trailerToEdit?.plate ?? '');
@@ -76,6 +76,8 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
           children: [
             TextFormField(
               controller: nameCtrl,
+              textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+              inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
               decoration: const InputDecoration(
                 labelText: 'Nombre / No. Económico',
                 hintText: 'Ej: T-20',
@@ -85,6 +87,8 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
             const SizedBox(height: 10),
             TextFormField(
               controller: plateCtrl,
+              textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+              inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
               decoration: const InputDecoration(
                 labelText: 'Placas',
                 hintText: 'Ej: SON-998',
@@ -94,6 +98,8 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
             const SizedBox(height: 10),
             TextFormField(
               controller: boxCtrl,
+              textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
+              inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
               decoration: const InputDecoration(
                 labelText: 'Tipo de Caja / No. Caja',
                 hintText: 'Ej: 53 PIES / C-10',
@@ -111,17 +117,15 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
               if (nameCtrl.text.isEmpty) return;
 
               final trailerData = CompanyTrailer(
-                id: trailerToEdit?.id, // Conservar ID si es edición
+                id: trailerToEdit?.id, 
                 name: nameCtrl.text,
                 plate: plateCtrl.text,
                 box: boxCtrl.text,
               );
 
               if (trailerToEdit == null) {
-                // CREAR
                 await _supabaseService.createCompanyTrailer(trailerData);
               } else {
-                // ACTUALIZAR (EDITAR)
                 await _supabaseService.updateCompanyTrailer(trailerData);
               }
 
@@ -156,12 +160,10 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // --- BOTÓN EDITAR ---
                           IconButton(
                             icon: const Icon(Icons.edit, color: Colors.blue),
                             onPressed: () => _showTrailerDialog(trailerToEdit: t),
                           ),
-                          // --- BOTÓN ELIMINAR ---
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             onPressed: () => _deleteTrailer(t),
@@ -172,9 +174,20 @@ class _CompanyTrailersScreenState extends State<CompanyTrailersScreen> {
                   },
                 ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showTrailerDialog(), // Nuevo sin argumentos
+        onPressed: () => _showTrailerDialog(), 
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+// --- CLASE MÁGICA PARA FORZAR MAYÚSCULAS ---
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }
