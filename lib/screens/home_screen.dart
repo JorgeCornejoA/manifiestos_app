@@ -16,20 +16,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool isAdmin = false;
-  late StreamSubscription<ConnectivityResult> _connectivitySubscription; // <--- EL RADAR
+  late StreamSubscription<ConnectivityResult> _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _checkAdmin();
+    _checkAdminRole(); // <--- Llamamos a la nueva función que verifica la BD
     
-    // 1. Revisar al abrir la pantalla
     SupabaseService().syncPendingManifests();
 
-    // 2. Encender el radar en tiempo real
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
       if (result != ConnectivityResult.none) {
-        // ¡Detectó que regresó el internet! Dispara la sincronización silenciosa
         SupabaseService().syncPendingManifests();
       }
     });
@@ -37,16 +34,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    // Apagamos el radar si cerramos la app para ahorrar batería
     _connectivitySubscription.cancel();
     super.dispose();
   }
 
-  void _checkAdmin() {
+  // --- NUEVA FUNCIÓN: Verifica el rol en la Base de Datos ---
+  Future<void> _checkAdminRole() async {
     final currentUserEmail = Supabase.instance.client.auth.currentUser?.email;
-    setState(() {
-      isAdmin = currentUserEmail == 'soporte@fruver.com.mx';
-    });
+    
+    // Si por alguna razón es el de soporte, lo dejamos pasar siempre como respaldo
+    if (currentUserEmail == 'soporte@fruver.com.mx') {
+      if (mounted) setState(() => isAdmin = true);
+      return;
+    }
+
+    // Buscamos al empleado actual en la base de datos
+    final currentEmployee = await SupabaseService().getCurrentEmployee();
+    
+    if (mounted && currentEmployee != null && currentEmployee.isAdmin) {
+      setState(() => isAdmin = true);
+    }
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -125,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
+    // Se agrega el botón si la base de datos confirmó que es Admin
     if (isAdmin) {
       menuItems.add(
         _MenuItem(

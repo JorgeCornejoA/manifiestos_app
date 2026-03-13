@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:typed_data'; 
-import 'package:http/http.dart' as http; 
+import 'package:flutter/services.dart'; 
+import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/manifest_data.dart';
@@ -9,7 +9,6 @@ import 'package:manifiestos_app/utils/pdf_generator.dart';
 import 'package:printing/printing.dart';
 import 'package:signature/signature.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/services.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
@@ -101,6 +100,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _trailerNoController = TextEditingController();
   List<TextEditingController> _producerControllers = []; 
   final _fechaController = TextEditingController();
+  final _horaSalidaController = TextEditingController(); 
   
   final _consignadoAController = TextEditingController();
   final _domicilioController = TextEditingController();
@@ -282,6 +282,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _selectedTipo = manifest.tipo;
     _trailerNoController.text = manifest.trailerNo;
     _fechaController.text = manifest.fecha;
+    _horaSalidaController.text = manifest.horaSalida ?? ''; 
     _consignadoAController.text = manifest.consignadoA;
     _domicilioController.text = manifest.domicilio;
     _ciudadController.text = manifest.ciudad;
@@ -372,8 +373,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   @override
   void dispose() {
     _trailerNoController.dispose();
-    for (var c in _producerControllers) c.dispose();
     _fechaController.dispose();
+    _horaSalidaController.dispose(); 
+    for (var c in _producerControllers) c.dispose();
     _consignadoAController.dispose();
     _domicilioController.dispose();
     _ciudadController.dispose();
@@ -629,6 +631,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         trailerNo: _trailerNoController.text,
         productor: mainProductorString,
         fecha: _fechaController.text,
+        horaSalida: _horaSalidaController.text.isNotEmpty ? _horaSalidaController.text : null,
         consignadoA: _consignadoAController.text,
         domicilio: _domicilioController.text,
         ciudad: _ciudadController.text,
@@ -665,6 +668,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         trailerNo: savedManifest.trailerNo,
         productor: savedManifest.productor,
         fecha: savedManifest.fecha,
+        horaSalida: _horaSalidaController.text.isNotEmpty ? _horaSalidaController.text : null,
         consignadoA: savedManifest.consignadoA,
         domicilio: savedManifest.domicilio,
         ciudad: savedManifest.ciudad,
@@ -848,6 +852,43 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // --- CAMPO: HORA DE SALIDA (Teclado Mágico) ---
+                  TextFormField(
+                    controller: _horaSalidaController,
+                    decoration: const InputDecoration(
+                      labelText: 'HORA DE SALIDA',
+                      hintText: 'Opcional (Ej. 04:30 PM)',
+                      suffixIcon: Icon(Icons.access_time),
+                    ),
+                    readOnly: true, 
+                    onTap: () async {
+                      final TimeOfDay? picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                        // SOLUCIÓN: Esto fuerza al reloj y al teclado a mostrar la opción de AM/PM
+                        builder: (BuildContext context, Widget? child) {
+                          return MediaQuery(
+                            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+                            child: Localizations.override(
+                              context: context,
+                              locale: const Locale('en', 'US'), 
+                              child: child!,
+                            ),
+                          );
+                        },
+                      );
+                      
+                      if (picked != null && context.mounted) {
+                        setState(() {
+                          final now = DateTime.now();
+                          final dt = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+                          _horaSalidaController.text = DateFormat('hh:mm a').format(dt).toUpperCase(); 
+                        });
+                      }
+                    },
                   ),
                   const SizedBox(height: 20),
                   
@@ -1182,7 +1223,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               isActive: _currentStep >= 3,
             ),
             
-            // --- NUEVO PASO: OBSERVACIONES ---
             Step(
               title: const Text('Observaciones'),
               content: Form(
