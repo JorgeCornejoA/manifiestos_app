@@ -4,7 +4,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class PdfGenerator {
-  static Future<Uint8List> generatePdfBytes(ManifestData data, {String? nombreUsuario}) async {
+  static Future<Uint8List> generatePdfBytes(ManifestData data,
+      {String? nombreUsuario}) async {
     final pdf = pw.Document();
 
     // 1. CARGAMOS ROBOTO (Para todo el documento)
@@ -20,8 +21,10 @@ class PdfGenerator {
     final logoImage = pw.MemoryImage(logoAsset.buffer.asUint8List());
 
     // Obtenemos la hora actual para el PDF
-    final now = DateTime.now();
-    final horaActual = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final horaSalidaStr =
+        (data.horaSalida != null && data.horaSalida!.isNotEmpty)
+            ? data.horaSalida!
+            : '--:--';
 
     pdf.addPage(
       pw.MultiPage(
@@ -34,90 +37,106 @@ class PdfGenerator {
             // --- ENCABEZADO ---
             _buildHeader(context, logoImage, data),
             pw.SizedBox(height: 8),
-            
-            // --- 2. GENERADO POR Y HORA (En la parte superior) ---
+
+            // --- 2. GENERADO POR Y HORA (Alineados con la tabla izquierda) ---
             pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text(
-                  'Generado por: ${nombreUsuario ?? data.embarcoNombre}',
-                  style: pw.TextStyle(
-                    fontSize: 8, 
-                    color: PdfColors.grey700, 
-                    fontStyle: pw.FontStyle.italic,
-                    fontWeight: pw.FontWeight.bold
-                  )
+                pw.Expanded(
+                  flex: 7, // Mismo ancho que la tabla de la izquierda
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Hora de salida: $horaSalidaStr',
+                          style: pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                              fontStyle: pw.FontStyle.italic,
+                              fontWeight: pw.FontWeight.bold)),
+                      pw.Text(
+                          'Generado por: ${nombreUsuario ?? data.embarcoNombre}',
+                          style: pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                              fontStyle: pw.FontStyle.italic,
+                              fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
                 ),
-                pw.Text(
-                  'Hora: $horaActual',
-                  style: pw.TextStyle(
-                    fontSize: 8, 
-                    color: PdfColors.grey700, 
-                    fontStyle: pw.FontStyle.italic,
-                    fontWeight: pw.FontWeight.bold
-                  )
+                pw.Expanded(
+                  flex: 3, // Espacio vacío arriba del diagrama
+                  child: pw.SizedBox(),
                 ),
-              ]
+              ],
             ),
             pw.SizedBox(height: 5),
 
             // --- LA MAGIA: PARTITIONS ---
-            pw.Partitions(
-              children: [
-                
-                // COLUMNA IZQUIERDA (Info General y Carga - Ocupa 70%)
-                pw.Partition(
-                  flex: 7,
-                  child: pw.Column(
+            pw.Partitions(children: [
+              // COLUMNA IZQUIERDA (Info General y Carga - Ocupa 70%)
+              pw.Partition(
+                flex: 7,
+                child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                     children: [
                       _buildInfoSection(context, data),
                       pw.SizedBox(height: 10),
-                      
+
                       // Tablas de Carga (Se pondrán justo debajo de info)
                       ...data.carga.asMap().entries.map((entry) {
-                         int index = entry.key;
-                         List<CargaItem> seccion = entry.value;
-                         String productorName = "";
-                         if (index < data.sectionProducers.length) {
-                           productorName = data.sectionProducers[index];
-                         }
+                        int index = entry.key;
+                        List<CargaItem> seccion = entry.value;
+                        String productorName = "";
+                        if (index < data.sectionProducers.length) {
+                          productorName = data.sectionProducers[index];
+                        }
 
-                         return pw.Padding(
-                           padding: const pw.EdgeInsets.only(bottom: 10),
-                           child: _buildCargaTable(context, seccion, productorName)
-                         );
+                        return pw.Padding(
+                            padding: const pw.EdgeInsets.only(bottom: 10),
+                            child: _buildCargaTable(
+                                context, seccion, productorName));
                       }).toList(),
 
                       // Observaciones
+                      // Observaciones
                       pw.SizedBox(height: 5),
-                      pw.Text('Observaciones: ${data.observaciones}',
-                          style: const pw.TextStyle(fontSize: 9)),
+                      pw.RichText(
+                        text: pw.TextSpan(
+                          children: [
+                            pw.TextSpan(
+                              text: 'Observaciones: ',
+                              style: const pw.TextStyle(fontSize: 9), // Texto normal en negro
+                            ),
+                            pw.TextSpan(
+                              text: data.observaciones,
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold, // <-- NEGRITAS
+                                color: PdfColors.red,           // <-- COLOR ROJO
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       pw.SizedBox(height: 10),
                       _buildAdditionalText(),
-                    ]
-                  ),
-                ),
+                    ]),
+              ),
 
-                // COLUMNA DERECHA (Diagrama del Trailer - Ocupa 30%)
-                pw.Partition(
+              // COLUMNA DERECHA (Diagrama del Trailer - Ocupa 30%)
+              pw.Partition(
                   flex: 3,
                   child: pw.Padding(
-                    padding: const pw.EdgeInsets.only(left: 15), // Separación entre carga y diagrama
+                    padding: const pw.EdgeInsets.only(
+                        left: 15), // Separación entre carga y diagrama
                     child: _buildTrailerDiagram(context, data.trailerLayout),
-                  )
-                ),
-                
-              ]
-            ),
+                  )),
+            ]),
 
             // Espacio reducido para no saltar de hoja
-            pw.SizedBox(height: 15), 
+            pw.SizedBox(height: 15),
 
             // --- 3. SECCIÓN DE FIRMAS (Limpia y compacta) ---
-            pw.Container(
-              child: _buildSignatureSection(context, data)
-            ),
+            pw.Container(child: _buildSignatureSection(context, data)),
           ];
         },
       ),
@@ -143,19 +162,18 @@ class PdfGenerator {
         );
       }
     }
-    
+
     return pdf.save();
   }
 
   static pw.Widget _buildHeader(
       pw.Context context, pw.ImageProvider logo, ManifestData data) {
-    
     final headerTextStyle = pw.TextStyle(
         color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10);
 
     // Si el folio es 0 o null (modo offline), escribimos PENDIENTE. Si no, su número de 5 dígitos.
-    final folioString = (data.folio == null || data.folio == 0) 
-        ? 'PENDIENTE' 
+    final folioString = (data.folio == null || data.folio == 0)
+        ? 'PENDIENTE'
         : data.folio!.toString().padLeft(5, '0');
 
     final isTrailer = data.tipo == 'T';
@@ -167,7 +185,6 @@ class PdfGenerator {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Image(logo, width: 100),
-        
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
@@ -183,7 +200,6 @@ class PdfGenerator {
                 style: const pw.TextStyle(fontSize: 8)),
           ],
         ),
-
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
@@ -194,40 +210,34 @@ class PdfGenerator {
                 children: [
                   pw.TableRow(children: [
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                      padding: const pw.EdgeInsets.symmetric(
+                          vertical: 2, horizontal: 2),
                       alignment: pw.Alignment.center,
                       color: PdfColors.lightBlue800,
-                      child: pw.Text(
-                        'NOTA DE REMISIÓN', 
-                        style: pw.TextStyle(
-                          color: PdfColors.white, 
-                          fontWeight: pw.FontWeight.bold, 
-                          fontSize: 7 
-                        )
-                      ),
+                      child: pw.Text('NOTA DE REMISIÓN',
+                          style: pw.TextStyle(
+                              color: PdfColors.white,
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 7)),
                     ),
                   ]),
                   pw.TableRow(children: [
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 4),
                       alignment: pw.Alignment.center,
-                      child: pw.Text(
-                        'Nº $folioString', 
-                        style: pw.TextStyle(
-                          font: pw.Font.courierBold(), 
-                          color: PdfColors.red, 
-                          fontSize: 12,
-                          fontWeight: pw.FontWeight.bold
-                        )
-                      ),
+                      child: pw.Text('Nº $folioString',
+                          style: pw.TextStyle(
+                              font: pw.Font.courierBold(),
+                              color: PdfColors.red,
+                              fontSize: 12,
+                              fontWeight: pw.FontWeight.bold)),
                     )
                   ])
                 ],
               ),
             ),
-            
             pw.SizedBox(height: 5),
-
             pw.SizedBox(
               width: 120,
               child: pw.Table(
@@ -243,13 +253,14 @@ class PdfGenerator {
                   ]),
                   pw.TableRow(children: [
                     pw.Container(
-                      padding:
-                          const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       alignment: pw.Alignment.center,
                       child: pw.Text('$valuePrefix${data.trailerNo}',
                           style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.red, fontSize: 10)),
+                              color: PdfColors.red,
+                              fontSize: 10)),
                     )
                   ])
                 ],
@@ -265,7 +276,8 @@ class PdfGenerator {
     final labelStyle =
         pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
     final valueStyle = const pw.TextStyle(fontSize: 9);
-    final headerTextStyle = labelStyle.copyWith(color: PdfColors.white, fontSize: 9);
+    final headerTextStyle =
+        labelStyle.copyWith(color: PdfColors.white, fontSize: 9);
 
     pw.Widget buildTitledCell(String title, String value) {
       return pw.Container(
@@ -301,33 +313,21 @@ class PdfGenerator {
       children: [
         pw.Row(children: [
           pw.Expanded(
-            flex: 2, 
-            child: buildTitledCell('PRODUCTOR:', data.productor)
-          ),
-          pw.Expanded(
-            flex: 1, 
-            child: buildTitledCell('FECHA:', data.fecha)
-          ),
+              flex: 2, child: buildTitledCell('PRODUCTOR:', data.productor)),
+          pw.Expanded(flex: 1, child: buildTitledCell('FECHA:', data.fecha)),
         ]),
-        
         headerCell('DATOS DEL DESTINO'),
-        
         pw.Row(children: [
           pw.Expanded(
-            flex: 2, 
-            child: buildTitledCell('CONSIGNADO A:', data.consignadoA)
-          ),
+              flex: 2,
+              child: buildTitledCell('CONSIGNADO A:', data.consignadoA)),
           pw.Expanded(
-            flex: 3, 
-            child: buildTitledCell('DOMICILIO:', data.domicilio)
-          ),
+              flex: 3, child: buildTitledCell('DOMICILIO:', data.domicilio)),
         ]),
-
         pw.Row(children: [
           pw.Expanded(child: buildTitledCell('CIUDAD:', data.ciudad)),
           pw.Expanded(child: buildTitledCell('CONDICIONES:', data.condiciones)),
         ]),
-        
         headerCell('DATOS DEL TRANSPORTISTA'),
         buildTitledCell('OPERADOR:', data.operador),
         pw.Row(children: [
@@ -336,19 +336,27 @@ class PdfGenerator {
           pw.Expanded(child: buildTitledCell('CAJA:', data.caja)),
         ]),
         pw.Row(children: [
-          pw.Expanded(child: buildTitledCell('LINEA TRANSPORTISTA:', data.lineaTransportista)),
+          pw.Expanded(
+              child: buildTitledCell(
+                  'LINEA TRANSPORTISTA:', data.lineaTransportista)),
           pw.Expanded(child: buildTitledCell('TEL (INCLUIR LADA):', data.tel)),
         ]),
         pw.Row(children: [
-          pw.Expanded(child: buildTitledCell('IMPORTE DEL FLETE:', data.importeFlete == 0 ? '' : '\$${data.importeFlete}')),
-          pw.Expanded(child: buildTitledCell('ANTICIPO DEL FLETE:', data.anticipoFlete == 0 ? '' : '\$${data.anticipoFlete}')),
+          pw.Expanded(
+              child: buildTitledCell('IMPORTE DEL FLETE:',
+                  data.importeFlete == 0 ? '' : '\$${data.importeFlete}')),
+          pw.Expanded(
+              child: buildTitledCell('ANTICIPO DEL FLETE:',
+                  data.anticipoFlete == 0 ? '' : '\$${data.anticipoFlete}')),
         ]),
       ],
     );
   }
 
-  static pw.Widget _buildCargaTable(pw.Context context, List<CargaItem> carga, String productorName) {
-    final headerTextStyle = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
+  static pw.Widget _buildCargaTable(
+      pw.Context context, List<CargaItem> carga, String productorName) {
+    final headerTextStyle = pw.TextStyle(
+        fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
 
     final totalPallets = carga.fold<int>(0, (sum, item) => sum + item.pallets);
     final totalCajas = carga.fold<int>(0, (sum, item) => sum + item.cajas);
@@ -359,12 +367,13 @@ class PdfGenerator {
         // Título de la tabla
         pw.Container(
           width: double.infinity,
-          padding: const pw.EdgeInsets.symmetric(vertical: 2), 
+          padding: const pw.EdgeInsets.symmetric(vertical: 2),
           alignment: pw.Alignment.center,
           color: PdfColors.lightBlue800,
-          child: pw.Text("DATOS DE LA CARGA - ${productorName.toUpperCase()}", style: headerTextStyle),
+          child: pw.Text("DATOS DE LA CARGA - ${productorName.toUpperCase()}",
+              style: headerTextStyle),
         ),
-        
+
         // Tabla (Si es muy larga, repetirá los encabezados en la página 2)
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),
@@ -377,7 +386,8 @@ class PdfGenerator {
           },
           children: [
             pw.TableRow(
-              repeat: true, // ¡Clave para que no se pierdan los títulos al cambiar de hoja!
+              repeat:
+                  true, // ¡Clave para que no se pierdan los títulos al cambiar de hoja!
               decoration: const pw.BoxDecoration(color: PdfColors.lightBlue100),
               children: [
                 _cellHeader('PRODUCTO'),
@@ -428,7 +438,7 @@ class PdfGenerator {
       );
 
   static pw.Widget _emptyCell() => pw.Container(
-        height: 18, 
+        height: 18,
         decoration: const pw.BoxDecoration(
           border: pw.Border(
             top: pw.BorderSide(color: PdfColors.black, width: 0.8),
@@ -464,109 +474,106 @@ class PdfGenerator {
     );
   }
 
-  static pw.Widget _buildSignatureSection(pw.Context context, ManifestData data) {
+  static pw.Widget _buildSignatureSection(
+      pw.Context context, ManifestData data) {
     return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceAround, // Ajustado para centrar mejor ambas firmas sin el estorbo de la "Hora"
+      mainAxisAlignment: pw.MainAxisAlignment
+          .spaceAround, // Ajustado para centrar mejor ambas firmas sin el estorbo de la "Hora"
       crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
-        _signatureBox(context, 'EMBARCÓ (NOMBRE Y FIRMA)', data.embarcoNombre, data.embarcoFirmaBytes),
-        _signatureBox(context, 'RECIBIÓ (NOMBRE Y FIRMA)', data.recibioNombre, data.recibioFirmaBytes),
+        _signatureBox(context, 'EMBARCÓ (NOMBRE Y FIRMA)', data.embarcoNombre,
+            data.embarcoFirmaBytes),
+        _signatureBox(context, 'RECIBIÓ (NOMBRE Y FIRMA)', data.recibioNombre,
+            data.recibioFirmaBytes),
       ],
     );
   }
 
-  static pw.Widget _signatureBox(
-      pw.Context context, String title, String name, Uint8List? signatureBytes) {
+  static pw.Widget _signatureBox(pw.Context context, String title, String name,
+      Uint8List? signatureBytes) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         if (signatureBytes != null && signatureBytes.isNotEmpty)
           pw.Transform.translate(
             offset: const PdfPoint(0, -5),
-            child: pw.Image(
-              pw.MemoryImage(signatureBytes),
-              height: 65,
-              width: 130,
-              fit: pw.BoxFit.contain
-            ),
+            child: pw.Image(pw.MemoryImage(signatureBytes),
+                height: 65, width: 130, fit: pw.BoxFit.contain),
           )
         else
           pw.SizedBox(height: 65, width: 130),
-        
         pw.Container(width: 160, height: 1, color: PdfColors.black),
-        
         pw.SizedBox(height: 3),
-        
-        pw.Text(name, 
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), 
-          textAlign: pw.TextAlign.center
-        ),
-        
-        pw.Text(title, 
-          style: const pw.TextStyle(fontSize: 7), 
-          textAlign: pw.TextAlign.center
-        ),
+        pw.Text(name,
+            style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+            textAlign: pw.TextAlign.center),
+        pw.Text(title,
+            style: const pw.TextStyle(fontSize: 7),
+            textAlign: pw.TextAlign.center),
       ],
     );
   }
 
-  static pw.Widget _buildTrailerDiagram(pw.Context context, Map<String, String> layout) {
+  static pw.Widget _buildTrailerDiagram(
+      pw.Context context, Map<String, String> layout) {
     final rows = <pw.TableRow>[];
-    const double cellHeight = 35.0; // <--- ALTURA PERFECTA PARA QUE NO HAYA SALTO DE PÁGINA
+    const double cellHeight =
+        35.0; // <--- ALTURA PERFECTA PARA QUE NO HAYA SALTO DE PÁGINA
 
     for (int i = 0; i < 15; i++) {
       final index1 = i * 2;
       final index2 = i * 2 + 1;
-      
+
       rows.add(pw.TableRow(
         verticalAlignment: pw.TableCellVerticalAlignment.middle,
         children: [
           // Número Izquierdo
           pw.Container(
-            height: cellHeight, // Altura congelada
-            alignment: pw.Alignment.center, 
-            child: pw.Text('${index1 + 1}', style: const pw.TextStyle(fontSize: 8))
-          ),
-          
+              height: cellHeight, // Altura congelada
+              alignment: pw.Alignment.center,
+              child: pw.Text('${index1 + 1}',
+                  style: const pw.TextStyle(fontSize: 8))),
+
           // Contenido Izquierdo (Tarima)
           pw.Container(
-            height: cellHeight,
-            padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2), 
-            alignment: pw.Alignment.center, 
-            child: pw.Text(
-              layout[index1.toString()] ?? '', 
-              style: const pw.TextStyle(fontSize: 8), 
-              textAlign: pw.TextAlign.center,
-              maxLines: 3, // <--- LÍMITE DE 3 RENGLONES EN EL PDF
-            )
-          ),
-          
+              height: cellHeight,
+              padding:
+                  const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+              alignment: pw.Alignment.center,
+              child: pw.Text(
+                layout[index1.toString()] ?? '',
+                style: const pw.TextStyle(fontSize: 8),
+                textAlign: pw.TextAlign.center,
+                maxLines: 3, // <--- LÍMITE DE 3 RENGLONES EN EL PDF
+              )),
+
           // Contenido Derecho (Tarima)
           pw.Container(
-            height: cellHeight,
-            padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2), 
-            alignment: pw.Alignment.center, 
-            child: pw.Text(
-              layout[index2.toString()] ?? '', 
-              style: const pw.TextStyle(fontSize: 8),
-              textAlign: pw.TextAlign.center,
-              maxLines: 3, 
-            )
-          ),
-          
+              height: cellHeight,
+              padding:
+                  const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+              alignment: pw.Alignment.center,
+              child: pw.Text(
+                layout[index2.toString()] ?? '',
+                style: const pw.TextStyle(fontSize: 8),
+                textAlign: pw.TextAlign.center,
+                maxLines: 3,
+              )),
+
           // Número Derecho
           pw.Container(
-            height: cellHeight,
-            alignment: pw.Alignment.center, 
-            child: pw.Text('${index2 + 1}', style: const pw.TextStyle(fontSize: 8))
-          ),
+              height: cellHeight,
+              alignment: pw.Alignment.center,
+              child: pw.Text('${index2 + 1}',
+                  style: const pw.TextStyle(fontSize: 8))),
         ],
       ));
     }
 
     return pw.Column(
       children: [
-        pw.Text('DIFUSOR', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+        pw.Text('DIFUSOR',
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
         pw.SizedBox(height: 4),
         pw.Table(
           border: pw.TableBorder.all(),
@@ -579,7 +586,8 @@ class PdfGenerator {
           children: rows,
         ),
         pw.SizedBox(height: 4),
-        pw.Text('PUERTAS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+        pw.Text('PUERTAS',
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
       ],
     );
   }

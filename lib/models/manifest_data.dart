@@ -7,6 +7,7 @@ class ManifestData {
   final String trailerNo;
   final String productor;
   final String fecha;
+  final String? horaSalida;
   final String consignadoA;
   final String domicilio;
   final String ciudad;
@@ -47,6 +48,7 @@ class ManifestData {
     required this.trailerNo,
     required this.productor,
     required this.fecha,
+    this.horaSalida,
     required this.consignadoA,
     this.domicilio = '',
     this.ciudad = '',
@@ -82,6 +84,7 @@ class ManifestData {
       'trailer_no': trailerNo,
       'productor': productor,
       'fecha': fecha,
+      'hora_salida': horaSalida,
       'consignado_a': consignadoA,
       'domicilio': domicilio,
       'ciudad': ciudad,
@@ -141,6 +144,7 @@ class ManifestData {
       trailerNo: map['trailer_no'] ?? '',
       productor: map['productor'] ?? '',
       fecha: map['fecha'] ?? '',
+      horaSalida: map['hora_salida'], // <--- ¡AQUÍ ESTÁ AGREGADO!
       consignadoA: map['consignado_a'] ?? '',
       domicilio: map['domicilio'] ?? '',
       ciudad: map['ciudad'] ?? '',
