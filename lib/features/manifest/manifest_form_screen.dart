@@ -1229,8 +1229,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 key: _formKeyStep4,
                 child: TextFormField(
                   controller: _observacionesController,
-                  textCapitalization: TextCapitalization.characters,
-                  inputFormatters: [UpperCaseTextFormatter()],
+                  textCapitalization: TextCapitalization.sentences, // <-- Cambio para permitir minúsculas
+                  // (Eliminamos el inputFormatter que forzaba las mayúsculas)
                   decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
                   maxLines: 3,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'El campo de observaciones es obligatorio' : null,

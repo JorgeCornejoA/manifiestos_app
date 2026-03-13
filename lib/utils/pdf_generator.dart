@@ -97,9 +97,26 @@ class PdfGenerator {
                       }).toList(),
 
                       // Observaciones
+                      // Observaciones
                       pw.SizedBox(height: 5),
-                      pw.Text('Observaciones: ${data.observaciones}',
-                          style: const pw.TextStyle(fontSize: 9)),
+                      pw.RichText(
+                        text: pw.TextSpan(
+                          children: [
+                            pw.TextSpan(
+                              text: 'Observaciones: ',
+                              style: const pw.TextStyle(fontSize: 9), // Texto normal en negro
+                            ),
+                            pw.TextSpan(
+                              text: data.observaciones,
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold, // <-- NEGRITAS
+                                color: PdfColors.red,           // <-- COLOR ROJO
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       pw.SizedBox(height: 10),
                       _buildAdditionalText(),
                     ]),
