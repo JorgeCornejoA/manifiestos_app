@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:manifiestos_app/features/employees/employees_screen.dart';
 import 'package:manifiestos_app/features/company_trailers/company_trailers_screen.dart'; 
+import 'package:manifiestos_app/features/products/products_screen.dart'; // <--- IMPORTAMOS LA NUEVA PANTALLA
 import 'package:manifiestos_app/services/supabase_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -21,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _checkAdminRole(); // <--- Llamamos a la nueva función que verifica la BD
+    _checkAdminRole(); 
     
     SupabaseService().syncPendingManifests();
 
@@ -38,17 +39,14 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // --- NUEVA FUNCIÓN: Verifica el rol en la Base de Datos ---
   Future<void> _checkAdminRole() async {
     final currentUserEmail = Supabase.instance.client.auth.currentUser?.email;
     
-    // Si por alguna razón es el de soporte, lo dejamos pasar siempre como respaldo
     if (currentUserEmail == 'soporte@fruver.com.mx') {
       if (mounted) setState(() => isAdmin = true);
       return;
     }
 
-    // Buscamos al empleado actual en la base de datos
     final currentEmployee = await SupabaseService().getCurrentEmployee();
     
     if (mounted && currentEmployee != null && currentEmployee.isAdmin) {
@@ -118,6 +116,13 @@ class _HomeScreenState extends State<HomeScreen> {
         route: '/clients',
       ),
       _MenuItem(
+        title: 'Productos', // <--- EL NUEVO BOTÓN
+        icon: Icons.inventory_2,
+        color: const Color(0xFF0277BD),
+        isDirectNav: true,
+        destination: const ProductsScreen(),
+      ),
+      _MenuItem(
         title: 'Operadores',
         icon: Icons.person_pin_circle, 
         color: const Color(0xFF388E3C),
@@ -132,7 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
-    // Se agrega el botón si la base de datos confirmó que es Admin
     if (isAdmin) {
       menuItems.add(
         _MenuItem(

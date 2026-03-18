@@ -5,9 +5,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:manifiestos_app/models/client.dart';
 import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
-import 'package:manifiestos_app/models/company_trailer.dart'; 
+import 'package:manifiestos_app/models/company_trailer.dart';
+import 'package:manifiestos_app/models/product.dart'; // <--- NUEVO
+import 'package:manifiestos_app/models/tamano.dart'; // <--- NUEVO
 import 'package:manifiestos_app/services/local_db_service.dart';
-import 'package:manifiestos_app/utils/pdf_generator.dart'; // <--- IMPORTANTE PARA EL PDF OFICIAL
+import 'package:manifiestos_app/utils/pdf_generator.dart'; 
 import 'package:uuid/uuid.dart';
 
 class SupabaseService {
@@ -27,16 +29,16 @@ class SupabaseService {
   // ==========================================================
   //      EL SINCRONIZADOR MÁGICO DE MANIFIESTOS PENDIENTES
   // ==========================================================
-  static bool _isSyncing = false; // <--- EL CANDADO DE SEGURIDAD
+  static bool _isSyncing = false;
 
   Future<void> syncPendingManifests() async {
-    if (_isSyncing) return; // Si ya está sincronizando, detente
+    if (_isSyncing) return;
     if (!await _hasInternet()) return;
 
     final pending = LocalDbService.getPendingManifests();
     if (pending.isEmpty) return; 
 
-    _isSyncing = true; // Ponemos el candado
+    _isSyncing = true;
 
     try {
       print('🌐 Iniciando sincronización de ${pending.length} manifiestos offline...');
@@ -57,7 +59,6 @@ class SupabaseService {
           final embarcoFirmaBytes = item['embarcoFirmaBytes'] as Uint8List?;
           final recibioFirmaBytes = item['recibioFirmaBytes'] as Uint8List?;
 
-          // 1. Subir Fotos
           if (evidencePhotosBytes != null && evidencePhotosBytes.isNotEmpty) {
             for (var bytes in evidencePhotosBytes) {
               final uniqueName = '${_uuid.v4()}.png';
@@ -68,8 +69,7 @@ class SupabaseService {
             }
           }
 
-          // 2. Subir Firmas (Con Sello de Tiempo anti-caché)
-          final timestamp = DateTime.now().millisecondsSinceEpoch; // El truco
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
 
           if (embarcoFirmaBytes != null && embarcoFirmaBytes.isNotEmpty) {
             final path = 'signatures/$manifestId/embarco_firma.png';
@@ -82,14 +82,12 @@ class SupabaseService {
             recibioFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
           }
 
-          // 3. Preparar datos
           rawData['embarco_firma_url'] = embarcoFirmaUrl;
           rawData['recibio_firma_url'] = recibioFirmaUrl;
           rawData['evidence_photos_urls'] = finalPhotoUrls;
           rawData.remove('folio'); 
           rawData.remove('pdf_url'); 
 
-          // 4. UPSERT en lugar de INSERT (Más seguro por si hay un micro-corte de internet)
           final savedRecord = await _supabase.from('manifests').upsert(rawData).select().single();
           final savedManifest = ManifestData.fromMap(savedRecord);
 
@@ -97,20 +95,15 @@ class SupabaseService {
           savedManifest.recibioFirmaBytes = recibioFirmaBytes;
           savedManifest.evidencePhotosBytes = evidencePhotosBytes;
 
-          // 5. Generar PDF Oficial
           final pdfBytes = await PdfGenerator.generatePdfBytes(savedManifest, nombreUsuario: usuarioSincronizador);
           final fileName = 'manifiesto-${savedManifest.id}.pdf';
           final pdfPath = 'pdfs/$fileName';
           
           await _supabase.storage.from('manifests').uploadBinary(pdfPath, pdfBytes, fileOptions: const FileOptions(upsert: true));
           
-          // El truco en el PDF sincronizado
           final pdfUrl = '${_supabase.storage.from('manifests').getPublicUrl(pdfPath)}?t=$timestamp';
 
-          // 6. Actualizar BD
           await _supabase.from('manifests').update({'pdf_url': pdfUrl}).eq('id', savedManifest.id!);
-
-          // 7. Borrar de memoria
           await LocalDbService.deletePendingManifest(i);
           print('✅ Sincronizado. Folio Oficial: ${savedManifest.folio}');
 
@@ -119,25 +112,22 @@ class SupabaseService {
         }
       }
     } finally {
-      _isSyncing = false; // Quitamos el candado al terminar, pase lo que pase
+      _isSyncing = false;
     }
   }
 
   // ==========================================
-  //           MANIFIESTOS (Flujo Normal / Offline)
+  //          MANIFIESTOS
   // ==========================================
 
   Future<ManifestData?> saveManifest(ManifestData data) async { 
     try {
       final manifestId = data.id ?? _uuid.v4();
 
-      // --- MODO OFFLINE (SIN INTERNET) ---
       if (!await _hasInternet()) {
-        print('Modo Offline: Guardando manifiesto en la caja de pendientes...');
-        
         final manifestDataMap = data.toMap();
         manifestDataMap['id'] = manifestId;
-        manifestDataMap['folio'] = 0; // Forzamos 0 para que sea "PENDIENTE"
+        manifestDataMap['folio'] = 0; 
         
         final localMap = {
           'data': manifestDataMap,
@@ -145,14 +135,11 @@ class SupabaseService {
           'recibioFirmaBytes': data.recibioFirmaBytes,
           'evidencePhotosBytes': data.evidencePhotosBytes,
         };
-        
         await LocalDbService.savePendingManifest(localMap);
-        
         return ManifestData.fromMap(manifestDataMap);
       }
 
-      // --- MODO ONLINE (CON INTERNET) ---
-      final timestamp = DateTime.now().millisecondsSinceEpoch; // Sello anti-caché
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
       String? embarcoFirmaUrl = data.embarcoFirmaUrl;
       String? recibioFirmaUrl = data.recibioFirmaUrl;
       List<String> finalPhotoUrls = List.from(data.evidencePhotosUrls ?? []);
@@ -163,11 +150,7 @@ class SupabaseService {
           final bytes = data.evidencePhotosBytes![i];
           final uniqueName = '${_uuid.v4()}.png'; 
           final path = 'evidence/$manifestId/$uniqueName';
-          
-          await _supabase.storage.from('manifests').uploadBinary(
-            path, bytes, fileOptions: const FileOptions(upsert: true),
-          );
-          
+          await _supabase.storage.from('manifests').uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
           final url = _supabase.storage.from('manifests').getPublicUrl(path);
           finalPhotoUrls.add(url);
         }
@@ -175,16 +158,12 @@ class SupabaseService {
 
       if (data.embarcoFirmaBytes != null && data.embarcoFirmaBytes!.isNotEmpty) {
         final path = 'signatures/$manifestId/embarco_firma.png';
-        await _supabase.storage.from('manifests').uploadBinary(
-              path, data.embarcoFirmaBytes!, fileOptions: const FileOptions(upsert: true),
-            );
+        await _supabase.storage.from('manifests').uploadBinary(path, data.embarcoFirmaBytes!, fileOptions: const FileOptions(upsert: true));
         embarcoFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
       }
       if (data.recibioFirmaBytes != null && data.recibioFirmaBytes!.isNotEmpty) {
         final path = 'signatures/$manifestId/recibio_firma.png';
-        await _supabase.storage.from('manifests').uploadBinary(
-              path, data.recibioFirmaBytes!, fileOptions: const FileOptions(upsert: true),
-            );
+        await _supabase.storage.from('manifests').uploadBinary(path, data.recibioFirmaBytes!, fileOptions: const FileOptions(upsert: true));
         recibioFirmaUrl = '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
       }
 
@@ -206,7 +185,6 @@ class SupabaseService {
       return ManifestData.fromMap(savedRecord);
 
     } catch (e) {
-      print('Error en saveManifest: $e');
       throw Exception('Detalle del error: $e'); 
     }
   }
@@ -216,29 +194,19 @@ class SupabaseService {
       final response = await _supabase.from('manifests').select().order('created_at', ascending: false); 
       return (response as List<dynamic>).map((data) => ManifestData.fromMap(data as Map<String, dynamic>)).toList();
     } catch (e) {
-      print('Error en getManifests: $e');
       return [];
     }
   }
 
   Future<void> deleteManifest(String id) async {
-    try {
-      await _supabase.from('manifests').delete().eq('id', id);
-    } catch (e) {
-      throw Exception('No se pudo eliminar el manifiesto: $e');
-    }
+    await _supabase.from('manifests').delete().eq('id', id);
   }
 
   Future<String?> uploadPdf(Uint8List pdfBytes, String fileName) async {
     try {
       if (!await _hasInternet()) return 'offline_pdf'; 
-
       final path = 'pdfs/$fileName';
-      await _supabase.storage.from('manifests').uploadBinary(
-            path, pdfBytes, fileOptions: const FileOptions(upsert: true),
-          );
-          
-      // EL TRUCO: Le pegamos la hora exacta al link para romper la caché del celular
+      await _supabase.storage.from('manifests').uploadBinary(path, pdfBytes, fileOptions: const FileOptions(upsert: true));
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       return '${_supabase.storage.from('manifests').getPublicUrl(path)}?t=$timestamp';
     } catch (e) {
@@ -250,18 +218,14 @@ class SupabaseService {
     try {
       if (!await _hasInternet() || pdfUrl == 'offline_pdf') return; 
       await _supabase.from('manifests').update({'pdf_url': pdfUrl}).eq('id', manifestId);
-    } catch (e) {
-      print('Error al actualizar PDF URL: $e');
-    }
+    } catch (e) {}
   }
 
-  // Descarga optimizada para firmas de Supabase
   Future<Uint8List?> _downloadBytesFromUrl(String url) async {
     try {
       final uri = Uri.parse(url);
       final pathSegments = uri.pathSegments;
       final bucketIndex = pathSegments.indexOf('manifests');
-      
       if (bucketIndex != -1 && bucketIndex + 1 < pathSegments.length) {
         final internalPath = pathSegments.sublist(bucketIndex + 1).join('/');
         return await Supabase.instance.client.storage.from('manifests').download(internalPath);
@@ -273,7 +237,7 @@ class SupabaseService {
   }
 
   // ==========================================
-  //           CATÁLOGOS
+  //          CATÁLOGOS VARIOS
   // ==========================================
   
   Future<List<CompanyTrailer>> getCompanyTrailers() async {
@@ -344,40 +308,83 @@ class SupabaseService {
     await _supabase.from('producers').delete().eq('id', id);
   }
 
+  // ==========================================
+  //          NUEVO: CATÁLOGO DE PRODUCTOS
+  // ==========================================
+
+  Future<List<Map<String, dynamic>>> searchProducts(String query) async {
+    try {
+      final response = await _supabase
+          .from('t_producto')
+          .select('c_codigo_pro, v_nombre_pro, c_codigo_tam, t_tamano(v_nombre_tam)')
+          .ilike('v_nombre_pro', '%$query%')
+          .order('v_nombre_pro', ascending: true)
+          .limit(10);
+          
+      // ¡AQUÍ ESTÁ LA MAGIA! Convertimos la respuesta al formato estricto que pide Flutter
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error buscando productos: $e');
+      return [];
+    }
+  }
+
+  Future<List<Product>> getAllProducts() async {
+    final response = await _supabase
+        .from('t_producto')
+        .select('c_codigo_pro, v_nombre_pro, c_codigo_tam, t_tamano(v_nombre_tam)')
+        .order('v_nombre_pro', ascending: true);
+    return (response as List<dynamic>).map((e) => Product.fromMap(e)).toList();
+  }
+
+  Future<List<Tamano>> getTamanos() async {
+    final response = await _supabase.from('t_tamano').select().order('v_nombre_tam', ascending: true);
+    return (response as List<dynamic>).map((e) => Tamano.fromMap(e)).toList();
+  }
+
+  Future<void> createProduct(Product product) async {
+    await _supabase.from('t_producto').insert(product.toMap());
+  }
+
+  Future<void> updateProduct(Product product) async {
+    await _supabase.from('t_producto').update(product.toMap()).eq('c_codigo_pro', product.codigoPro);
+  }
+
+  Future<void> deleteProduct(String codigoPro) async {
+    await _supabase.from('t_producto').delete().eq('c_codigo_pro', codigoPro);
+  }
+
+  // ==========================================
+  //          EMPLEADOS, CLIENTES Y OPERADORES
+  // ==========================================
+
   Future<Employee?> getCurrentEmployee() async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null || user.email == null) return null;
 
-      // 1. Si HAY internet, pedimos los datos completos a Supabase (Nombre y Firma)
       if (await _hasInternet()) {
         final response = await _supabase.from('employees').select().eq('email', user.email!).maybeSingle(); 
         if (response != null) return Employee.fromMap(response);
       } else {
-        // 2. Si NO HAY internet, buscamos en la memoria local
-        print('Modo Offline: Cargando nombre y forzando firma manual...');
         final localEmployees = LocalDbService.getData(LocalDbService.employeesBox);
         for (var empMap in localEmployees) {
           if (empMap['email'] == user.email) {
-            // Hacemos una copia de los datos del empleado
             final offlineMap = Map<String, dynamic>.from(empMap);
-            // ¡EL TRUCO! Borramos el link de la firma para obligarlo a firmar en la pantalla
             offlineMap['signature_url'] = null; 
-            
             return Employee.fromMap(offlineMap);
           }
         }
       }
       return null;
     } catch (e) {
-      // Plan de emergencia en caso de error
       final user = _supabase.auth.currentUser;
       if (user != null && user.email != null) {
         final localEmployees = LocalDbService.getData(LocalDbService.employeesBox);
         for (var empMap in localEmployees) {
           if (empMap['email'] == user.email) {
             final offlineMap = Map<String, dynamic>.from(empMap);
-            offlineMap['signature_url'] = null; // Borramos la firma
+            offlineMap['signature_url'] = null; 
             return Employee.fromMap(offlineMap);
           }
         }

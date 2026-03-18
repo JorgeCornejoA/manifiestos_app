@@ -28,9 +28,8 @@ Future<void> main() async {
   ]);
   // -------------------------------------------
 
-  const supabaseUrl = 'https://mnpffwxnrydzahnfivgv.supabase.co';
-  const supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ucGZmd3hucnlkemFobmZpdmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3ODUyNjMsImV4cCI6MjA3MzM2MTI2M30.1jiE_dZlSBrlWMA0JIwhaOMbiyoZljgIQlfMjohNZCY';
+ const supabaseUrl = 'https://gnoyrybosilgbugisukd.supabase.co';
+  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdub3lyeWJvc2lsZ2J1Z2lzdWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NjEyNzEsImV4cCI6MjA4OTMzNzI3MX0.g8SeB4rYWCFkEoD0ku414E_q88R6BAQH13K5ZSBcAdk';
 
   await Supabase.initialize(
     url: supabaseUrl,

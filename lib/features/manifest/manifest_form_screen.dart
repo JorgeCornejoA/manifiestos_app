@@ -14,6 +14,7 @@ import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
 import 'package:manifiestos_app/models/producer.dart';
 import 'package:manifiestos_app/models/company_trailer.dart';
+import 'package:manifiestos_app/models/product.dart'; // <--- IMPORTACIÓN DEL PRODUCTO
 
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -1229,8 +1230,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 key: _formKeyStep4,
                 child: TextFormField(
                   controller: _observacionesController,
-                  textCapitalization: TextCapitalization.sentences, // <-- Cambio para permitir minúsculas
-                  // (Eliminamos el inputFormatter que forzaba las mayúsculas)
+                  textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
                   maxLines: 3,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'El campo de observaciones es obligatorio' : null,
@@ -1361,16 +1361,50 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                                   onPressed: () => _removeItemFromSection(sectionIndex, itemIndex))
                           ],
                         ),
-                        TextFormField(
-                          controller: controllers.producto,
-                          focusNode: controllers.productoNode,
-                          textCapitalization: TextCapitalization.characters,
-                          inputFormatters: [UpperCaseTextFormatter()],
-                          decoration: const InputDecoration(labelText: 'Producto'),
-                          onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
-                          textInputAction: TextInputAction.next,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                        // --- MAGIA APLICADA: CAMPO DE PRODUCTO AUTOCOMPLETABLE ---
+                        Autocomplete<Product>(
+                          optionsBuilder: (textEditingValue) async {
+                            if (textEditingValue.text.isEmpty) return const Iterable.empty();
+                            
+                            try {
+                              final data = await _supabaseService.searchProducts(textEditingValue.text);
+                              return data.map((e) => Product.fromMap(e));
+                            } catch (e) {
+                              print('Error en el Autocomplete de Productos: $e');
+                              return const Iterable.empty();
+                            }
+                          },
+                          displayStringForOption: (option) => option.nombrePro,
+                          onSelected: (selection) {
+                            setState(() {
+                              controllers.producto.text = selection.nombrePro;
+                              if (selection.nombreTam.isNotEmpty) {
+                                controllers.tamano.text = selection.nombreTam;
+                              }
+                            });
+                            controllers.etiquetasNode.requestFocus(); 
+                          },
+                          fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                            if (controller.text != controllers.producto.text) {
+                              controller.text = controllers.producto.text;
+                            }
+                            return TextFormField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              textCapitalization: TextCapitalization.characters,
+                              inputFormatters: [UpperCaseTextFormatter()],
+                              decoration: const InputDecoration(
+                                labelText: 'Producto',
+                                suffixIcon: Icon(Icons.search, size: 18)
+                              ),
+                              onChanged: (val) => controllers.producto.text = val,
+                              onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
+                              textInputAction: TextInputAction.next,
+                              validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                            );
+                          },
                         ),
+                        // -------------------------------------------------------------
                         TextFormField(
                             controller: controllers.etiquetas,
                             focusNode: controllers.etiquetasNode,
