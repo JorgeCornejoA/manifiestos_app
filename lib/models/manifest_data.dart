@@ -1,17 +1,46 @@
 import 'dart:typed_data';
 
-class ManifestData {
-  final String? id;
-  final int? folio; // <--- NUEVO: Folio Autoincrementable
-  final String tipo; 
-  final String trailerNo;
-  final String productor;
-  final String fecha;
-  final String? horaSalida;
+// --- NUEVA CLASE PARA AGRUPAR LOS DATOS DE CADA DESTINO ---
+class DestinoData {
   final String consignadoA;
   final String domicilio;
   final String ciudad;
   final String condiciones;
+
+  DestinoData({
+    this.consignadoA = '',
+    this.domicilio = '',
+    this.ciudad = '',
+    this.condiciones = '',
+  });
+
+  Map<String, dynamic> toMap() => {
+        'consignado_a': consignadoA,
+        'domicilio': domicilio,
+        'ciudad': ciudad,
+        'condiciones': condiciones,
+      };
+
+  factory DestinoData.fromMap(Map<String, dynamic> map) => DestinoData(
+        consignadoA: map['consignado_a'] ?? '',
+        domicilio: map['domicilio'] ?? '',
+        ciudad: map['ciudad'] ?? '',
+        condiciones: map['condiciones'] ?? '',
+      );
+}
+
+class ManifestData {
+  final String? id;
+  final int? folio;
+  final String tipo;
+  final String trailerNo;
+  final String productor;
+  final String fecha;
+  final String? horaSalida;
+  
+  // --- AHORA ES UNA LISTA DE DESTINOS ---
+  final List<DestinoData> destinos;
+  
   final String operador;
   final String trailer;
   final String placas;
@@ -20,15 +49,16 @@ class ManifestData {
   final String tel;
   final int importeFlete;
   final int anticipoFlete;
-  
-  final List<List<CargaItem>> carga; 
+
+  final List<List<CargaItem>> carga;
   final List<String> sectionProducers;
-  
+  final List<int> sectionDestinos; // <--- LIGA LA CARGA AL DESTINO (0 = Destino 1, 1 = Destino 2, etc.)
+
   final String observaciones;
   final String embarcoNombre;
   final String recibioNombre;
   final Map<String, String> trailerLayout;
-  
+
   // Firmas
   Uint8List? embarcoFirmaBytes;
   Uint8List? recibioFirmaBytes;
@@ -38,21 +68,18 @@ class ManifestData {
   // Evidencia
   List<String>? evidencePhotosUrls;
   List<Uint8List>? evidencePhotosBytes;
-  
+
   final String? pdfUrl;
 
   ManifestData({
     this.id,
-    this.folio, // <--- Agregar al constructor
+    this.folio,
     this.tipo = 'T',
     required this.trailerNo,
     required this.productor,
     required this.fecha,
     this.horaSalida,
-    required this.consignadoA,
-    this.domicilio = '',
-    this.ciudad = '',
-    this.condiciones = '',
+    required this.destinos,
     required this.operador,
     this.trailer = '',
     this.placas = '',
@@ -63,6 +90,7 @@ class ManifestData {
     this.anticipoFlete = 0,
     required this.carga,
     List<String>? sectionProducers,
+    List<int>? sectionDestinos,
     this.observaciones = '',
     required this.embarcoNombre,
     required this.recibioNombre,
@@ -74,21 +102,29 @@ class ManifestData {
     this.evidencePhotosUrls,
     this.evidencePhotosBytes,
     this.pdfUrl,
-  }) : sectionProducers = sectionProducers ?? List.filled(carga.length, '');
+  })  : sectionProducers = sectionProducers ?? List.filled(carga.length, ''),
+        sectionDestinos = sectionDestinos ?? List.filled(carga.length, 0);
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      // 'folio': folio, <-- NO ENVIAMOS FOLIO (La base de datos lo genera)
       'tipo': tipo,
       'trailer_no': trailerNo,
       'productor': productor,
       'fecha': fecha,
       'hora_salida': horaSalida,
-      'consignado_a': consignadoA,
-      'domicilio': domicilio,
-      'ciudad': ciudad,
-      'condiciones': condiciones,
+      
+      // Guardamos la lista de destinos en JSON
+      'destinos': destinos.map((d) => d.toMap()).toList(),
+      // Guardamos la liga de cada carga con su destino
+      'section_destinos': sectionDestinos,
+
+      // Por compatibilidad con tu BD vieja, guardamos el Destino 1 en los campos viejos
+      'consignado_a': destinos.isNotEmpty ? destinos.first.consignadoA : '',
+      'domicilio': destinos.isNotEmpty ? destinos.first.domicilio : '',
+      'ciudad': destinos.isNotEmpty ? destinos.first.ciudad : '',
+      'condiciones': destinos.isNotEmpty ? destinos.first.condiciones : '',
+
       'operador': operador,
       'trailer': trailer,
       'placas': placas,
@@ -116,13 +152,9 @@ class ManifestData {
       final rawCarga = map['carga'] as List;
       if (rawCarga.isNotEmpty) {
         if (rawCarga.first is List) {
-          parsedCarga = rawCarga.map((section) => 
-            (section as List).map((item) => CargaItem.fromMap(item)).toList()
-          ).toList();
+          parsedCarga = rawCarga.map((section) => (section as List).map((item) => CargaItem.fromMap(item)).toList()).toList();
         } else {
-          parsedCarga = [
-            rawCarga.map((item) => CargaItem.fromMap(item)).toList()
-          ];
+          parsedCarga = [rawCarga.map((item) => CargaItem.fromMap(item)).toList()];
         }
       }
     }
@@ -137,18 +169,35 @@ class ManifestData {
       }
     }
 
+    // --- CARGAMOS LOS DESTINOS (Nuevos o Viejos) ---
+    List<DestinoData> parsedDestinos = [];
+    if (map['destinos'] != null) {
+      parsedDestinos = (map['destinos'] as List).map((e) => DestinoData.fromMap(e)).toList();
+    } else {
+      parsedDestinos.add(DestinoData(
+        consignadoA: map['consignado_a'] ?? '',
+        domicilio: map['domicilio'] ?? '',
+        ciudad: map['ciudad'] ?? '',
+        condiciones: map['condiciones'] ?? '',
+      ));
+    }
+
+    List<int> parsedSectionDestinos = [];
+    if (map['section_destinos'] != null) {
+      parsedSectionDestinos = List<int>.from(map['section_destinos']);
+    } else {
+      parsedSectionDestinos = List.filled(parsedCarga.length, 0);
+    }
+
     return ManifestData(
       id: map['id'],
-      folio: map['folio'], // <--- LEEMOS EL FOLIO DE LA BD
+      folio: map['folio'],
       tipo: map['tipo'] ?? 'T',
       trailerNo: map['trailer_no'] ?? '',
       productor: map['productor'] ?? '',
       fecha: map['fecha'] ?? '',
-      horaSalida: map['hora_salida'], // <--- ¡AQUÍ ESTÁ AGREGADO!
-      consignadoA: map['consignado_a'] ?? '',
-      domicilio: map['domicilio'] ?? '',
-      ciudad: map['ciudad'] ?? '',
-      condiciones: map['condiciones'] ?? '',
+      horaSalida: map['hora_salida'],
+      destinos: parsedDestinos,
       operador: map['operador'] ?? '',
       trailer: map['trailer'] ?? '',
       placas: map['placas'] ?? '',
@@ -159,15 +208,14 @@ class ManifestData {
       anticipoFlete: map['anticipo_flete'] ?? 0,
       carga: parsedCarga,
       sectionProducers: parsedProducers,
+      sectionDestinos: parsedSectionDestinos,
       observaciones: map['observaciones'] ?? '',
       embarcoNombre: map['embarco_nombre'] ?? '',
       recibioNombre: map['recibio_nombre'] ?? '',
       trailerLayout: Map<String, String>.from(map['trailer_layout'] ?? {}),
       embarcoFirmaUrl: map['embarco_firma_url'],
       recibioFirmaUrl: map['recibio_firma_url'],
-      evidencePhotosUrls: map['evidence_photos_urls'] != null 
-          ? List<String>.from(map['evidence_photos_urls']) 
-          : [],
+      evidencePhotosUrls: map['evidence_photos_urls'] != null ? List<String>.from(map['evidence_photos_urls']) : [],
       pdfUrl: map['pdf_url'],
     );
   }

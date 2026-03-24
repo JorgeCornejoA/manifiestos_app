@@ -14,6 +14,22 @@ import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
 import 'package:manifiestos_app/models/producer.dart';
 import 'package:manifiestos_app/models/company_trailer.dart';
+import 'package:manifiestos_app/models/product.dart';
+
+class _DestinoControllers {
+  Client? selectedClient;
+  final TextEditingController consignadoA = TextEditingController();
+  final TextEditingController domicilio = TextEditingController();
+  final TextEditingController ciudad = TextEditingController();
+  final TextEditingController condiciones = TextEditingController();
+
+  void dispose() {
+    consignadoA.dispose();
+    domicilio.dispose();
+    ciudad.dispose();
+    condiciones.dispose();
+  }
+}
 
 class _CargaItemControllers {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -75,9 +91,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   bool _isLoading = false;
   bool _canPop = false;
 
-  Client? _selectedClient;
   Operator? _selectedOperator;
-
   String? _embarcoFirmaUrl;
   String? _recibioFirmaUrl;
 
@@ -98,14 +112,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _formKeyStep5 = GlobalKey<FormState>(); 
 
   final _trailerNoController = TextEditingController();
-  List<TextEditingController> _producerControllers = []; 
   final _fechaController = TextEditingController();
   final _horaSalidaController = TextEditingController(); 
   
-  final _consignadoAController = TextEditingController();
-  final _domicilioController = TextEditingController();
-  final _ciudadController = TextEditingController();
-  final _condicionesController = TextEditingController();
+  List<TextEditingController> _producerControllers = []; 
+  List<_DestinoControllers> _destinosControllers = []; 
+  List<int> _sectionDestinosIndices = []; 
   
   final _operadorController = TextEditingController();
   final _trailerController = TextEditingController();
@@ -113,8 +125,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _cajaController = TextEditingController();
   final _lineaTransportistaController = TextEditingController();
   final _telController = TextEditingController();
-  final _importeFleteController = TextEditingController();
-  final _anticipoFleteController = TextEditingController();
   
   final _observacionesController = TextEditingController();
   final _embarcoNombreController = TextEditingController();
@@ -123,13 +133,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   List<List<_CargaItemControllers>> _cargaSectionsControllers = [];
   
   late Map<int, TextEditingController> _trailerLayoutControllers;
-  final SignatureController _embarcoSignatureController =
-      SignatureController(penStrokeWidth: 2, penColor: Colors.black);
-  final SignatureController _recibioSignatureController =
-      SignatureController(penStrokeWidth: 2, penColor: Colors.black);
+  final SignatureController _embarcoSignatureController = SignatureController(penStrokeWidth: 2, penColor: Colors.black);
+  final SignatureController _recibioSignatureController = SignatureController(penStrokeWidth: 2, penColor: Colors.black);
 
-  int _totalPallets = 0;
-  int _totalCajas = 0;
 
   @override
   void initState() {
@@ -142,6 +148,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     } else {
       _fechaController.text = _formatDate(DateTime.now());
       setState(() {
+        _addDestinoSection(); 
         _addProducerSection(); 
       });
     }
@@ -153,7 +160,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     if (emp != null && mounted) {
       setState(() {
         _usuarioLogueado = emp.name; 
-        
         if (widget.manifest == null) {
           _embarcoNombreController.text = emp.name;
           if (emp.signatureUrl != null) {
@@ -190,10 +196,37 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
+  void _addDestinoSection() {
+    setState(() {
+      _destinosControllers.add(_DestinoControllers());
+      if (_destinosControllers.length == 1) {
+        for (int i = 0; i < _sectionDestinosIndices.length; i++) {
+          _sectionDestinosIndices[i] = 0;
+        }
+      }
+    });
+  }
+
+  void _removeDestinoSection(int index) {
+    setState(() {
+      _destinosControllers[index].dispose();
+      _destinosControllers.removeAt(index);
+      
+      for (int i = 0; i < _sectionDestinosIndices.length; i++) {
+        if (_sectionDestinosIndices[i] == index) {
+          _sectionDestinosIndices[i] = 0; 
+        } else if (_sectionDestinosIndices[i] > index) {
+          _sectionDestinosIndices[i]--; 
+        }
+      }
+    });
+  }
+
   void _addProducerSection() {
     setState(() {
       _producerControllers.add(TextEditingController());
       _cargaSectionsControllers.add([]); 
+      _sectionDestinosIndices.add(0); 
       _addItemToSection(_cargaSectionsControllers.length - 1);
     });
   }
@@ -206,6 +239,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         controller.dispose();
       }
       _cargaSectionsControllers.removeAt(index);
+      _sectionDestinosIndices.removeAt(index);
       _calculateTotals();
     });
   }
@@ -231,9 +265,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
 
   void _calculateTotals() {
-    int currentTotalPallets = 0;
-    int currentTotalCajas = 0;
-
     for (var section in _cargaSectionsControllers) {
       for (var controllers in section) {
         final pallets = int.tryParse(controllers.pallets.text) ?? 0;
@@ -241,26 +272,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         final cajas = pallets * cajasPorPallet;
 
         controllers.cajas.text = cajas.toString();
-        currentTotalPallets += pallets;
-        currentTotalCajas += cajas;
       }
     }
-
     if (mounted) {
-      setState(() {
-        _totalPallets = currentTotalPallets;
-        _totalCajas = currentTotalCajas;
-      });
+      setState(() {}); // Solo para refrescar la interfaz
     }
   }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
-        imageQuality: 70, 
-        maxWidth: 1200,
-      );
+      final XFile? image = await _picker.pickImage(source: source, imageQuality: 70, maxWidth: 1200);
       if (image != null) {
         final bytes = await image.readAsBytes();
         setState(() {
@@ -283,18 +304,24 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _trailerNoController.text = manifest.trailerNo;
     _fechaController.text = manifest.fecha;
     _horaSalidaController.text = manifest.horaSalida ?? ''; 
-    _consignadoAController.text = manifest.consignadoA;
-    _domicilioController.text = manifest.domicilio;
-    _ciudadController.text = manifest.ciudad;
-    _condicionesController.text = manifest.condiciones;
+    
+    _destinosControllers.clear();
+    for (var d in manifest.destinos) {
+      final ctrl = _DestinoControllers();
+      ctrl.consignadoA.text = d.consignadoA;
+      ctrl.domicilio.text = d.domicilio;
+      ctrl.ciudad.text = d.ciudad;
+      ctrl.condiciones.text = d.condiciones;
+      _destinosControllers.add(ctrl);
+    }
+    if (_destinosControllers.isEmpty) _addDestinoSection();
+
     _operadorController.text = manifest.operador;
     _trailerController.text = manifest.trailer;
     _placasController.text = manifest.placas;
     _cajaController.text = manifest.caja;
     _lineaTransportistaController.text = manifest.lineaTransportista;
     _telController.text = manifest.tel;
-    _importeFleteController.text = manifest.importeFlete.toString();
-    _anticipoFleteController.text = manifest.anticipoFlete.toString();
     _observacionesController.text = manifest.observaciones;
     _embarcoNombreController.text = manifest.embarcoNombre;
     _recibioNombreController.text = manifest.recibioNombre;
@@ -308,17 +335,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         final bytes = await _downloadBytesFromUrl(url);
         if (bytes != null) loadedPhotos.add(bytes);
       }
-      if (mounted) {
-        setState(() {
-          _evidencePhotos = loadedPhotos;
-        });
-      }
+      if (mounted) setState(() => _evidencePhotos = loadedPhotos);
     }
 
     if (mounted) {
       setState(() {
         for (var controller in _producerControllers) controller.dispose();
         _producerControllers.clear();
+        _sectionDestinosIndices.clear();
+
         for (var section in _cargaSectionsControllers) {
           for (var controller in section) controller.dispose();
         }
@@ -338,6 +363,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         while (_cargaSectionsControllers.length < producersList.length) {
            _cargaSectionsControllers.add([]);
         }
+        
+        _sectionDestinosIndices = List.from(manifest.sectionDestinos);
+        while (_sectionDestinosIndices.length < producersList.length) {
+           _sectionDestinosIndices.add(0);
+        }
 
         int sectionIndex = 0;
         for (var sectionData in manifest.carga) {
@@ -355,9 +385,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           sectionIndex++;
         }
 
-        if (_producerControllers.isEmpty) {
-          _addProducerSection();
-        }
+        if (_producerControllers.isEmpty) _addProducerSection();
 
         for (final entry in manifest.trailerLayout.entries) {
           final index = int.tryParse(entry.key);
@@ -376,18 +404,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _fechaController.dispose();
     _horaSalidaController.dispose(); 
     for (var c in _producerControllers) c.dispose();
-    _consignadoAController.dispose();
-    _domicilioController.dispose();
-    _ciudadController.dispose();
-    _condicionesController.dispose();
+    for (var d in _destinosControllers) d.dispose();
     _operadorController.dispose();
     _trailerController.dispose();
     _placasController.dispose();
     _cajaController.dispose();
     _lineaTransportistaController.dispose();
     _telController.dispose();
-    _importeFleteController.dispose();
-    _anticipoFleteController.dispose();
     _observacionesController.dispose();
     _embarcoNombreController.dispose();
     _recibioNombreController.dispose();
@@ -396,9 +419,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _trailerLayoutControllers.forEach((_, controller) => controller.dispose());
     _bulkTextController.dispose();
     for (var section in _cargaSectionsControllers) {
-      for (var controller in section) {
-        controller.dispose();
-      }
+      for (var controller in section) controller.dispose();
     }
     super.dispose();
   }
@@ -409,7 +430,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       final data = await _supabaseService.searchClients(query);
       return data.map((json) => Client.fromMap(json));
     } catch (e) {
-      _showErrorSnackbar('Error al buscar clientes: $e');
       return const Iterable.empty();
     }
   }
@@ -420,7 +440,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       final data = await _supabaseService.searchOperators(query);
       return data.map((json) => Operator.fromMap(json));
     } catch (e) {
-      _showErrorSnackbar('Error al buscar operadores: $e');
       return const Iterable.empty();
     }
   }
@@ -431,17 +450,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       final data = await _supabaseService.searchEmployees(query);
       return data.map((json) => Employee.fromMap(json));
     } catch (e) {
-      _showErrorSnackbar('Error al buscar empleados: $e');
       return const Iterable.empty();
     }
   }
 
   void _showErrorSnackbar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: Colors.red,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
   }
 
   Future<bool> _showExitConfirmationDialog() async {
@@ -451,15 +466,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         title: const Text('¿Salir sin guardar?'),
         content: const Text('Si sales ahora, perderás los datos ingresados en este manifiesto.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Salir'),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('Salir')),
         ],
       ),
     ) ?? false;
@@ -467,58 +475,50 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
   bool _validateAllSteps() {
     if (_trailerNoController.text.isEmpty || _fechaController.text.isEmpty) {
-      _showErrorSnackbar('Error en "Info General": Faltan campos.');
-      return false;
+      _showErrorSnackbar('Error en "Info General": Faltan campos.'); return false;
     }
     if (_producerControllers.isEmpty || _producerControllers.any((c) => c.text.isEmpty)) {
-       _showErrorSnackbar('Error en "Info General": Falta nombre del productor.');
-       return false;
+       _showErrorSnackbar('Error en "Info General": Falta nombre del productor.'); return false;
     }
-    if (_consignadoAController.text.isEmpty) {
-      _showErrorSnackbar('Error en "Destino": Falta "Consignado A".');
-      return false;
+    if (_destinosControllers.isEmpty) {
+      _showErrorSnackbar('Debe existir al menos un Destino.'); return false;
+    }
+    for (int i = 0; i < _destinosControllers.length; i++) {
+      if (_destinosControllers[i].consignadoA.text.isEmpty) {
+        _showErrorSnackbar('Error en "Destino ${i+1}": Falta "Consignado A".'); return false;
+      }
     }
     if (_operadorController.text.isEmpty) {
-      _showErrorSnackbar('Error en "Transportista": Falta "Operador".');
-      return false;
+      _showErrorSnackbar('Error en "Transportista": Falta "Operador".'); return false;
     }
     if (_cargaSectionsControllers.isEmpty) {
-      _showErrorSnackbar('Error en "Carga": Debe haber carga.');
-      return false;
+      _showErrorSnackbar('Error en "Carga": Debe haber carga.'); return false;
     }
     for (int i = 0; i < _cargaSectionsControllers.length; i++) {
       if (_cargaSectionsControllers[i].isEmpty) {
-        _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): Vacía.');
-        return false;
+        _showErrorSnackbar('Error en "Carga" (Sección ${i+1}): Vacía.'); return false;
       }
       for (var controller in _cargaSectionsControllers[i]) {
-        if (controller.producto.text.isEmpty ||
-            (int.tryParse(controller.pallets.text) ?? 0) <= 0 ||
-            (int.tryParse(controller.cajasPorPallet.text) ?? 0) <= 0) {
-          _showErrorSnackbar('Error en "Carga": Datos inválidos.');
-          return false;
+        if (controller.producto.text.isEmpty || (int.tryParse(controller.pallets.text) ?? 0) <= 0 || (int.tryParse(controller.cajasPorPallet.text) ?? 0) <= 0) {
+          _showErrorSnackbar('Error en "Carga": Datos inválidos.'); return false;
         }
       }
     }
     if (_observacionesController.text.trim().isEmpty) {
-      _showErrorSnackbar('Error en "Observaciones": El campo es obligatorio.');
-      return false;
+      _showErrorSnackbar('Error en "Observaciones": El campo es obligatorio.'); return false;
     }
     if (_embarcoNombreController.text.isEmpty || _recibioNombreController.text.isEmpty) {
-       _showErrorSnackbar('Error en "Firmas": Faltan los nombres.');
-       return false;
+       _showErrorSnackbar('Error en "Firmas": Faltan los nombres.'); return false;
     }
     bool embarcoValid = _embarcoSignatureController.isNotEmpty || (_embarcoFirmaUrl != null && _embarcoFirmaUrl!.isNotEmpty);
     bool recibioValid = _recibioSignatureController.isNotEmpty || (_recibioFirmaUrl != null && _recibioFirmaUrl!.isNotEmpty);
 
     if (!embarcoValid || !recibioValid) {
-      _showErrorSnackbar('Error en "Firmas": Faltan las firmas.');
-      return false;
+      _showErrorSnackbar('Error en "Firmas": Faltan las firmas.'); return false;
     }
     bool isDiagramValid = _trailerLayoutControllers.values.any((c) => c.text.isNotEmpty);
     if (!isDiagramValid) {
-      _showErrorSnackbar('Error en "Diagrama": Indique al menos una posición.');
-      return false;
+      _showErrorSnackbar('Error en "Diagrama": Indique al menos una posición.'); return false;
     }
     return true;
   }
@@ -527,17 +527,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     final isLastStep = _currentStep == _totalSteps - 1;
 
     if (isLastStep) {
-      if (_validateAllSteps()) {
-        _generateAndSavePdf();
-      }
+      if (_validateAllSteps()) _generateAndSavePdf();
     } else {
       bool isValidCurrent = false;
       if (_currentStep == 0) isValidCurrent = _formKeyStep0.currentState!.validate();
       else if (_currentStep == 1) isValidCurrent = _formKeyStep1.currentState!.validate();
       else if (_currentStep == 2) isValidCurrent = _formKeyStep2.currentState!.validate();
       else if (_currentStep == 3) {
-        isValidCurrent = _cargaSectionsControllers.isNotEmpty && 
-                         _cargaSectionsControllers.every((s) => s.isNotEmpty);
+        isValidCurrent = _cargaSectionsControllers.isNotEmpty && _cargaSectionsControllers.every((s) => s.isNotEmpty);
         if (!isValidCurrent) _showErrorSnackbar('Añada carga antes de continuar.');
       }
       else if (_currentStep == 4) isValidCurrent = _formKeyStep4.currentState!.validate(); 
@@ -545,16 +542,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       else if (_currentStep == 6) isValidCurrent = true; 
       else if (_currentStep == 7) isValidCurrent = true; 
       
-      if (isValidCurrent) {
-        setState(() => _currentStep += 1);
-      }
+      if (isValidCurrent) setState(() => _currentStep += 1);
     }
   }
 
   void _onStepCancel() {
-    if (_currentStep > 0) {
-      setState(() => _currentStep -= 1);
-    }
+    if (_currentStep > 0) setState(() => _currentStep -= 1);
   }
 
   Future<Uint8List?> _downloadBytesFromUrl(String url) async {
@@ -562,19 +555,12 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       final uri = Uri.parse(url);
       final pathSegments = uri.pathSegments;
       final bucketIndex = pathSegments.indexOf('manifests');
-      
       if (bucketIndex != -1 && bucketIndex + 1 < pathSegments.length) {
         final internalPath = pathSegments.sublist(bucketIndex + 1).join('/');
-        
-        final bytes = await Supabase.instance.client.storage
-            .from('manifests')
-            .download(internalPath);
-            
-        return bytes;
+        return await Supabase.instance.client.storage.from('manifests').download(internalPath);
       }
       return null;
     } catch (e) {
-      debugPrint('Excepción al descargar imagen con Supabase: $e');
       return null;
     }
   }
@@ -589,20 +575,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       if (_embarcoSignatureController.isNotEmpty) {
         final bytes = await _embarcoSignatureController.toPngBytes();
-        pdfEmbarcoBytes = bytes;
-        bdEmbarcoBytes = bytes; 
+        pdfEmbarcoBytes = bytes; bdEmbarcoBytes = bytes; 
       } else if (_embarcoFirmaUrl != null && _embarcoFirmaUrl!.isNotEmpty) {
-        pdfEmbarcoBytes = await _downloadBytesFromUrl(_embarcoFirmaUrl!);
-        bdEmbarcoBytes = null; 
+        pdfEmbarcoBytes = await _downloadBytesFromUrl(_embarcoFirmaUrl!); bdEmbarcoBytes = null; 
       }
 
       if (_recibioSignatureController.isNotEmpty) {
         final bytes = await _recibioSignatureController.toPngBytes();
-        pdfRecibioBytes = bytes;
-        bdRecibioBytes = bytes;
+        pdfRecibioBytes = bytes; bdRecibioBytes = bytes;
       } else if (_recibioFirmaUrl != null && _recibioFirmaUrl!.isNotEmpty) {
-        pdfRecibioBytes = await _downloadBytesFromUrl(_recibioFirmaUrl!);
-        bdRecibioBytes = null;
+        pdfRecibioBytes = await _downloadBytesFromUrl(_recibioFirmaUrl!); bdRecibioBytes = null;
       }
 
       final layoutMap = <String, String>{};
@@ -624,6 +606,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 
       List<String> producerNames = _producerControllers.map((c) => c.text).toList();
       String mainProductorString = producerNames.join(" / ");
+      
+      List<DestinoData> finalDestinos = _destinosControllers.map((d) => DestinoData(
+        consignadoA: d.consignadoA.text,
+        domicilio: d.domicilio.text,
+        ciudad: d.ciudad.text,
+        condiciones: d.condiciones.text,
+      )).toList();
 
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
@@ -632,20 +621,18 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         productor: mainProductorString,
         fecha: _fechaController.text,
         horaSalida: _horaSalidaController.text.isNotEmpty ? _horaSalidaController.text : null,
-        consignadoA: _consignadoAController.text,
-        domicilio: _domicilioController.text,
-        ciudad: _ciudadController.text,
-        condiciones: _condicionesController.text,
+        destinos: finalDestinos,
         operador: _operadorController.text,
         trailer: _trailerController.text,
         placas: _placasController.text,
         caja: _cajaController.text,
         lineaTransportista: _lineaTransportistaController.text,
         tel: _telController.text,
-        importeFlete: int.tryParse(_importeFleteController.text) ?? 0,
-        anticipoFlete: int.tryParse(_anticipoFleteController.text) ?? 0,
+        importeFlete: 0, // Mandamos 0 por defecto a la BD
+        anticipoFlete: 0, // Mandamos 0 por defecto a la BD
         carga: cargaCompleta,
         sectionProducers: producerNames,
+        sectionDestinos: _sectionDestinosIndices,
         observaciones: _observacionesController.text,
         embarcoNombre: _embarcoNombreController.text,
         recibioNombre: _recibioNombreController.text,
@@ -669,10 +656,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         productor: savedManifest.productor,
         fecha: savedManifest.fecha,
         horaSalida: _horaSalidaController.text.isNotEmpty ? _horaSalidaController.text : null,
-        consignadoA: savedManifest.consignadoA,
-        domicilio: savedManifest.domicilio,
-        ciudad: savedManifest.ciudad,
-        condiciones: savedManifest.condiciones,
+        destinos: savedManifest.destinos,
         operador: savedManifest.operador,
         trailer: savedManifest.trailer,
         placas: savedManifest.placas,
@@ -683,6 +667,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         anticipoFlete: savedManifest.anticipoFlete,
         carga: savedManifest.carga,
         sectionProducers: savedManifest.sectionProducers,
+        sectionDestinos: savedManifest.sectionDestinos,
         observaciones: savedManifest.observaciones,
         embarcoNombre: savedManifest.embarcoNombre,
         recibioNombre: savedManifest.recibioNombre,
@@ -695,21 +680,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       final pdfBytes = await PdfGenerator.generatePdfBytes(dataForPdf, nombreUsuario: _usuarioLogueado);
       final fileName = 'manifiesto-${savedManifest.id}.pdf';
       final pdfUrl = await _supabaseService.uploadPdf(pdfBytes, fileName);
-      if (pdfUrl != null) {
-        await _supabaseService.updatePdfUrl(savedManifest.id!, pdfUrl);
-      }
+      if (pdfUrl != null) await _supabaseService.updatePdfUrl(savedManifest.id!, pdfUrl);
 
-      await Printing.layoutPdf(
-        onLayout: (format) async => pdfBytes,
-        name: fileName,
-      );
+      await Printing.layoutPdf(onLayout: (format) async => pdfBytes, name: fileName);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Manifiesto guardado y PDF generado con éxito')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Manifiesto guardado y PDF generado con éxito')));
         Navigator.of(context).pop();
       }
-
     } catch (e) {
       if (mounted) _showErrorSnackbar('Error al generar PDF: $e');
     } finally {
@@ -725,28 +703,20 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         if (didPop) return;
         final shouldExit = await _showExitConfirmationDialog();
         if (shouldExit) {
-          setState(() {
-            _canPop = true;
-          });
-          if (context.mounted) {
-            Navigator.of(context).pop();
-          }
+          setState(() => _canPop = true);
+          if (context.mounted) Navigator.of(context).pop();
         }
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.manifest == null
-              ? 'Nuevo Manifiesto'
-              : 'Detalles del Manifiesto'),
+          title: Text(widget.manifest == null ? 'Nuevo Manifiesto' : 'Detalles del Manifiesto'),
           actions: [
             if (!_isLoading)
               IconButton(
                 icon: const Icon(Icons.save),
                 tooltip: 'Guardar Manifiesto',
                 onPressed: () {
-                  if (_validateAllSteps()) {
-                    _generateAndSavePdf();
-                  }
+                  if (_validateAllSteps()) _generateAndSavePdf();
                 },
               ),
           ],
@@ -755,11 +725,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           type: StepperType.vertical,
           physics: const ClampingScrollPhysics(),
           currentStep: _currentStep,
-          onStepTapped: (int index) {
-            setState(() {
-              _currentStep = index;
-            });
-          },
+          onStepTapped: (int index) => setState(() => _currentStep = index),
           onStepContinue: _onStepContinue,
           onStepCancel: _onStepCancel,
           controlsBuilder: (context, details) {
@@ -769,23 +735,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               child: Row(
                 children: <Widget>[
                   if (_currentStep != 0)
-                    Expanded(
-                      child: TextButton.icon(
-                          icon: const Icon(Icons.arrow_back, size: 18),
-                          label: const Text('ATRÁS'),
-                          onPressed: details.onStepCancel),
-                    ),
+                    Expanded(child: TextButton.icon(icon: const Icon(Icons.arrow_back, size: 18), label: const Text('ATRÁS'), onPressed: details.onStepCancel)),
                   if (_currentStep != 0) const SizedBox(width: 8),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                        icon: isLastStep
-                            ? const Icon(Icons.save, size: 18)
-                            : const Icon(Icons.arrow_forward, size: 18),
+                        icon: isLastStep ? const Icon(Icons.save, size: 18) : const Icon(Icons.arrow_forward, size: 18),
                         label: Text(isLastStep ? 'FINALIZAR' : 'SIGUIENTE'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
+                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                         onPressed: details.onStepContinue),
                   ),
                 ],
@@ -807,24 +764,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         const SizedBox(width: 10),
                         ToggleButtons(
                           isSelected: [_selectedTipo == 'T', _selectedTipo == 'EA'],
-                          onPressed: (index) {
-                            setState(() {
-                              _selectedTipo = index == 0 ? 'T' : 'EA';
-                            });
-                          },
+                          onPressed: (index) => setState(() => _selectedTipo = index == 0 ? 'T' : 'EA'),
                           borderRadius: BorderRadius.circular(8),
                           selectedColor: Colors.white,
                           fillColor: Colors.green,
                           constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
-                          children: const [
-                            Text("Trailer"),
-                            Text("Entrada Alm."),
-                          ],
+                          children: const [Text("Trailer"), Text("Entrada Alm.")],
                         ),
                       ],
                     ),
                   ),
-                  
                   Row(
                     children: [
                       Expanded(
@@ -832,10 +781,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                           controller: _trailerNoController,
                           textCapitalization: TextCapitalization.characters,
                           inputFormatters: [UpperCaseTextFormatter()],
-                          decoration: InputDecoration(
-                            labelText: _selectedTipo == 'T' ? 'TRAILER No.' : 'ENTRADA ALMACÉN No.',
-                            hintText: '12345',
-                          ),
+                          decoration: InputDecoration(labelText: _selectedTipo == 'T' ? 'TRAILER No.' : 'ENTRADA ALMACÉN No.', hintText: '12345'),
                           textInputAction: TextInputAction.next,
                           validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
                         ),
@@ -844,8 +790,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       Expanded(
                         child: TextFormField(
                           controller: _fechaController,
-                          decoration: const InputDecoration(
-                              labelText: 'FECHA', suffixIcon: Icon(Icons.calendar_today)),
+                          decoration: const InputDecoration(labelText: 'FECHA', suffixIcon: Icon(Icons.calendar_today)),
                           readOnly: true,
                           onTap: _selectDate,
                           validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
@@ -854,33 +799,21 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-
-                  // --- CAMPO: HORA DE SALIDA (Teclado Mágico) ---
                   TextFormField(
                     controller: _horaSalidaController,
-                    decoration: const InputDecoration(
-                      labelText: 'HORA DE SALIDA',
-                      hintText: 'Opcional (Ej. 04:30 PM)',
-                      suffixIcon: Icon(Icons.access_time),
-                    ),
+                    decoration: const InputDecoration(labelText: 'HORA DE SALIDA', hintText: 'Opcional (Ej. 04:30 PM)', suffixIcon: Icon(Icons.access_time)),
                     readOnly: true, 
                     onTap: () async {
                       final TimeOfDay? picked = await showTimePicker(
                         context: context,
                         initialTime: TimeOfDay.now(),
-                        // SOLUCIÓN: Esto fuerza al reloj y al teclado a mostrar la opción de AM/PM
                         builder: (BuildContext context, Widget? child) {
                           return MediaQuery(
                             data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
-                            child: Localizations.override(
-                              context: context,
-                              locale: const Locale('en', 'US'), 
-                              child: child!,
-                            ),
+                            child: Localizations.override(context: context, locale: const Locale('en', 'US'), child: child!),
                           );
                         },
                       );
-                      
                       if (picked != null && context.mounted) {
                         setState(() {
                           final now = DateTime.now();
@@ -891,13 +824,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     },
                   ),
                   const SizedBox(height: 20),
-                  
-                  const Align(
-                    alignment: Alignment.centerLeft, 
-                    child: Text("Productores", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
-                  ),
+                  const Align(alignment: Alignment.centerLeft, child: Text("Productores", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                   const SizedBox(height: 10),
-                  
                   ...List.generate(_producerControllers.length, (index) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
@@ -911,23 +839,15 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                                 return data.map((e) => Producer.fromMap(e));
                               },
                               displayStringForOption: (option) => option.name,
-                              onSelected: (selection) {
-                                _producerControllers[index].text = selection.name;
-                              },
+                              onSelected: (selection) => _producerControllers[index].text = selection.name,
                               fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-                                if (controller.text != _producerControllers[index].text) {
-                                  controller.text = _producerControllers[index].text;
-                                }
+                                if (controller.text != _producerControllers[index].text) controller.text = _producerControllers[index].text;
                                 return TextFormField(
                                   controller: controller,
                                   focusNode: focusNode,
                                   textCapitalization: TextCapitalization.characters,
                                   inputFormatters: [UpperCaseTextFormatter()],
-                                  decoration: InputDecoration(
-                                    labelText: 'PRODUCTOR ${index + 1}',
-                                    suffixIcon: const Icon(Icons.search),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
+                                  decoration: InputDecoration(labelText: 'PRODUCTOR ${index + 1}', suffixIcon: const Icon(Icons.search), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
                                   onChanged: (val) => _producerControllers[index].text = val,
                                   validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
                                 );
@@ -935,103 +855,136 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                             ),
                           ),
                           if (_producerControllers.length > 1)
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle, color: Colors.red),
-                              onPressed: () => _removeProducerSection(index),
-                            ),
+                            IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => _removeProducerSection(index)),
                         ],
                       ),
                     );
                   }),
-
-                  TextButton.icon(
-                    icon: const Icon(Icons.add_circle),
-                    label: const Text("Agregar otro Productor"),
-                    onPressed: _addProducerSection,
-                  ),
+                  TextButton.icon(icon: const Icon(Icons.add_circle), label: const Text("Agregar otro Productor"), onPressed: _addProducerSection),
                 ]),
               ),
               isActive: _currentStep >= 0,
             ),
+            
             Step(
-              title: const Text('Destino'),
+              title: const Text('Destinos'),
               content: Form(
                 key: _formKeyStep1,
-                child: Column(children: [
-                  Autocomplete<Client>(
-                    optionsBuilder: (textEditingValue) => _searchClients(textEditingValue.text),
-                    displayStringForOption: (option) => option.name,
-                    onSelected: (selection) {
-                      setState(() {
-                        _selectedClient = selection;
-                        _consignadoAController.text = selection.name;
-                        _domicilioController.text = selection.domicilio;
-                        _ciudadController.text = selection.ciudad;
-                      });
-                      FocusScope.of(context).nextFocus();
-                    },
-                    fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (textEditingController.text != _consignadoAController.text) {
-                          textEditingController.text = _consignadoAController.text;
-                        }
-                      });
-                      return TextFormField(
-                        controller: textEditingController,
-                        focusNode: focusNode,
-                        textCapitalization: TextCapitalization.characters,
-                        inputFormatters: [UpperCaseTextFormatter()],
-                        decoration: const InputDecoration(labelText: 'CONSIGNADO A'),
-                        textInputAction: TextInputAction.next,
-                        validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
-                        onChanged: (value) {
-                          _consignadoAController.text = value;
-                          if (_selectedClient != null && value != _selectedClient!.name) {
-                            setState(() {
-                              _selectedClient = null;
-                              _domicilioController.clear();
-                              _ciudadController.clear();
-                            });
-                          }
-                        },
+                child: Column(
+                  children: [
+                    ...List.generate(_destinosControllers.length, (index) {
+                      final controllerGroup = _destinosControllers[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _destinosControllers.length > 1 ? 'DESTINO ${index + 1}' : 'DESTINO',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                                  ),
+                                  if (_destinosControllers.length > 1)
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      onPressed: () => _removeDestinoSection(index),
+                                    )
+                                ],
+                              ),
+                              Autocomplete<Client>(
+                                optionsBuilder: (textEditingValue) => _searchClients(textEditingValue.text),
+                                displayStringForOption: (option) => option.name,
+                                onSelected: (selection) {
+                                  setState(() {
+                                    controllerGroup.selectedClient = selection;
+                                    controllerGroup.consignadoA.text = selection.name;
+                                    controllerGroup.domicilio.text = selection.domicilio;
+                                    controllerGroup.ciudad.text = selection.ciudad;
+                                  });
+                                  FocusScope.of(context).nextFocus();
+                                },
+                                fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (textEditingController.text != controllerGroup.consignadoA.text) {
+                                      textEditingController.text = controllerGroup.consignadoA.text;
+                                    }
+                                  });
+                                  return TextFormField(
+                                    controller: textEditingController,
+                                    focusNode: focusNode,
+                                    textCapitalization: TextCapitalization.characters,
+                                    inputFormatters: [UpperCaseTextFormatter()],
+                                    decoration: const InputDecoration(labelText: 'CONSIGNADO A'),
+                                    textInputAction: TextInputAction.next,
+                                    validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                                    onChanged: (value) {
+                                      controllerGroup.consignadoA.text = value;
+                                      if (controllerGroup.selectedClient != null && value != controllerGroup.selectedClient!.name) {
+                                        setState(() {
+                                          controllerGroup.selectedClient = null;
+                                          controllerGroup.domicilio.clear();
+                                          controllerGroup.ciudad.clear();
+                                        });
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 10),
+                              TextFormField(
+                                controller: controllerGroup.domicilio,
+                                textCapitalization: TextCapitalization.characters,
+                                inputFormatters: [UpperCaseTextFormatter()],
+                                decoration: const InputDecoration(labelText: 'DOMICILIO'),
+                                readOnly: controllerGroup.domicilio.text.isNotEmpty && controllerGroup.consignadoA.text.isNotEmpty,
+                                textInputAction: TextInputAction.next
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: controllerGroup.ciudad,
+                                      textCapitalization: TextCapitalization.characters,
+                                      inputFormatters: [UpperCaseTextFormatter()],
+                                      decoration: const InputDecoration(labelText: 'CIUDAD'),
+                                      readOnly: controllerGroup.ciudad.text.isNotEmpty && controllerGroup.consignadoA.text.isNotEmpty,
+                                      textInputAction: TextInputAction.next
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: controllerGroup.condiciones,
+                                      textCapitalization: TextCapitalization.characters,
+                                      inputFormatters: [UpperCaseTextFormatter()],
+                                      decoration: const InputDecoration(labelText: 'CONDICIONES'),
+                                      textInputAction: TextInputAction.done
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                      controller: _domicilioController,
-                      textCapitalization: TextCapitalization.characters,
-                      inputFormatters: [UpperCaseTextFormatter()],
-                      decoration: const InputDecoration(labelText: 'DOMICILIO'),
-                      readOnly: _domicilioController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
-                      textInputAction: TextInputAction.next),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                            controller: _ciudadController,
-                            textCapitalization: TextCapitalization.characters,
-                            inputFormatters: [UpperCaseTextFormatter()],
-                            decoration: const InputDecoration(labelText: 'CIUDAD'),
-                            readOnly: _ciudadController.text.isNotEmpty && _consignadoAController.text.isNotEmpty,
-                            textInputAction: TextInputAction.next),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                            controller: _condicionesController,
-                            textCapitalization: TextCapitalization.characters,
-                            inputFormatters: [UpperCaseTextFormatter()],
-                            decoration: const InputDecoration(labelText: 'CONDICIONES'),
-                            textInputAction: TextInputAction.done),
-                      ),
-                    ],
-                  ),
-                ]),
+                    }),
+                    TextButton.icon(
+                      icon: const Icon(Icons.add_location_alt),
+                      label: const Text("Agregar otro Destino"),
+                      onPressed: _addDestinoSection,
+                    ),
+                  ],
+                ),
               ),
               isActive: _currentStep >= 1,
             ),
+            
             Step(
               title: const Text('Transportista'),
               content: Form(
@@ -1193,26 +1146,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                            controller: _importeFleteController,
-                            decoration: const InputDecoration(labelText: 'IMPORTE DEL FLETE'),
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.next),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                            controller: _anticipoFleteController,
-                            decoration: const InputDecoration(labelText: 'ANTICIPO DEL FLETE'),
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.next),
-                      ),
-                    ],
-                  ),
                 ])),
               ),
               isActive: _currentStep >= 2,
@@ -1229,8 +1162,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 key: _formKeyStep4,
                 child: TextFormField(
                   controller: _observacionesController,
-                  textCapitalization: TextCapitalization.sentences, // <-- Cambio para permitir minúsculas
-                  // (Eliminamos el inputFormatter que forzaba las mayúsculas)
+                  textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(labelText: 'OBSERVACIONES'),
                   maxLines: 3,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'El campo de observaciones es obligatorio' : null,
@@ -1336,6 +1268,35 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             ),
           ),
 
+          if (_destinosControllers.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: DropdownButtonFormField<int>(
+                decoration: const InputDecoration(
+                  labelText: '¿A qué destino va esta carga?',
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                value: _sectionDestinosIndices[sectionIndex] < _destinosControllers.length 
+                       ? _sectionDestinosIndices[sectionIndex] 
+                       : 0,
+                items: List.generate(_destinosControllers.length, (i) {
+                  final name = _destinosControllers[i].consignadoA.text;
+                  return DropdownMenuItem(
+                    value: i,
+                    child: Text('Destino ${i + 1}: ${name.isEmpty ? "(Sin asignar)" : name}'),
+                  );
+                }),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _sectionDestinosIndices[sectionIndex] = val;
+                    });
+                  }
+                },
+              ),
+            ),
+
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1353,23 +1314,52 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Producto ${itemIndex + 1}',
-                                style: Theme.of(context).textTheme.titleMedium),
+                            Text('Producto ${itemIndex + 1}', style: Theme.of(context).textTheme.titleMedium),
                             if (_cargaSectionsControllers[sectionIndex].length > 1)
                               IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.red),
                                   onPressed: () => _removeItemFromSection(sectionIndex, itemIndex))
                           ],
                         ),
-                        TextFormField(
-                          controller: controllers.producto,
-                          focusNode: controllers.productoNode,
-                          textCapitalization: TextCapitalization.characters,
-                          inputFormatters: [UpperCaseTextFormatter()],
-                          decoration: const InputDecoration(labelText: 'Producto'),
-                          onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
-                          textInputAction: TextInputAction.next,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                        Autocomplete<Product>(
+                          optionsBuilder: (textEditingValue) async {
+                            if (textEditingValue.text.isEmpty) return const Iterable.empty();
+                            try {
+                              final data = await _supabaseService.searchProducts(textEditingValue.text);
+                              return data.map((e) => Product.fromMap(e));
+                            } catch (e) {
+                              return const Iterable.empty();
+                            }
+                          },
+                          displayStringForOption: (option) => option.nombrePro,
+                          onSelected: (selection) {
+                            setState(() {
+                              controllers.producto.text = selection.nombrePro;
+                              if (selection.nombreTam.isNotEmpty) {
+                                controllers.tamano.text = selection.nombreTam;
+                              }
+                            });
+                            controllers.etiquetasNode.requestFocus(); 
+                          },
+                          fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                            if (controller.text != controllers.producto.text) {
+                              controller.text = controllers.producto.text;
+                            }
+                            return TextFormField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              textCapitalization: TextCapitalization.characters,
+                              inputFormatters: [UpperCaseTextFormatter()],
+                              decoration: const InputDecoration(
+                                labelText: 'Producto',
+                                suffixIcon: Icon(Icons.search, size: 18)
+                              ),
+                              onChanged: (val) => controllers.producto.text = val,
+                              onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
+                              textInputAction: TextInputAction.next,
+                              validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
+                            );
+                          },
                         ),
                         TextFormField(
                             controller: controllers.etiquetas,
@@ -1402,9 +1392,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                                       if ((int.tryParse(v) ?? 0) <= 0) return 'Debe ser > 0';
                                       return null;
                                     })),
-                            const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8.0),
-                                child: Text('x')),
+                            const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text('x')),
                             Expanded(
                                 child: TextFormField(
                                     controller: controllers.cajasPorPallet,
@@ -1563,15 +1551,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              IconButton(
-                  icon: const Icon(Icons.undo),
-                  onPressed: () => signatureController.undo()),
-              IconButton(
-                  icon: const Icon(Icons.redo),
-                  onPressed: () => signatureController.redo()),
-              IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => signatureController.clear()),
+              IconButton(icon: const Icon(Icons.undo), onPressed: () => signatureController.undo()),
+              IconButton(icon: const Icon(Icons.redo), onPressed: () => signatureController.redo()),
+              IconButton(icon: const Icon(Icons.clear), onPressed: () => signatureController.clear()),
             ],
           ),
         
@@ -1595,15 +1577,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                 textCapitalization: TextCapitalization.characters,
                 inputFormatters: [UpperCaseTextFormatter()],
                 decoration: const InputDecoration(labelText: 'Nombre'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'El nombre es obligatorio';
-                  }
-                  return null;
-                },
-                onChanged: (val) {
-                  nameController.text = val;
-                },
+                validator: (value) => (value == null || value.isEmpty) ? 'El nombre es obligatorio' : null,
+                onChanged: (val) => nameController.text = val,
               );
             },
           )
@@ -1613,12 +1588,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             textCapitalization: TextCapitalization.characters,
             inputFormatters: [UpperCaseTextFormatter()],
             decoration: const InputDecoration(labelText: 'Nombre'),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'El nombre es obligatorio';
-              }
-              return null;
-            },
+            validator: (value) => (value == null || value.isEmpty) ? 'El nombre es obligatorio' : null,
           ),
       ],
     );
@@ -1652,7 +1622,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   ),
                 ],
               ),
-              
               if (_isSelectionMode) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -1670,8 +1639,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       child: Text(_selectedIndices.length == 30 ? 'Deseleccionar Todo' : 'Seleccionar Todo'),
                     ),
                     const Spacer(),
-                    Text('${_selectedIndices.length} seleccionados', 
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                    Text('${_selectedIndices.length} seleccionados', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                   ],
                 ),
                 Row(
@@ -1681,26 +1649,17 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                         controller: _bulkTextController,
                         textCapitalization: TextCapitalization.characters, 
                         inputFormatters: [UpperCaseTextFormatter()], 
-                        decoration: const InputDecoration(
-                          labelText: 'Texto para aplicar',
-                          hintText: 'Ej. TOMATE',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                        ),
+                        decoration: const InputDecoration(labelText: 'Texto para aplicar', hintText: 'Ej. TOMATE', contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0)),
                       ),
                     ),
                     const SizedBox(width: 10),
                     ElevatedButton(
                       onPressed: _selectedIndices.isEmpty ? null : () {
                         setState(() {
-                          for (int index in _selectedIndices) {
-                            _trailerLayoutControllers[index]?.text = _bulkTextController.text;
-                          }
+                          for (int index in _selectedIndices) _trailerLayoutControllers[index]?.text = _bulkTextController.text;
                           _selectedIndices.clear();
                           _bulkTextController.clear();
-                          
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Texto aplicado a las casillas seleccionadas'), duration: Duration(seconds: 1)),
-                          );
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Texto aplicado a las casillas seleccionadas'), duration: Duration(seconds: 1)));
                         });
                       },
                       child: const Text('APLICAR'),
@@ -1712,23 +1671,14 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             ],
           ),
         ),
-
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 12.0),
-          child: Text(
-            'DIFUSOR', 
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 2.0)
-          ),
+          child: Text('DIFUSOR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 2.0)),
         ),
-        
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1.8, 
-              crossAxisSpacing: 4,
-              mainAxisSpacing: 4),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 1.8, crossAxisSpacing: 4, mainAxisSpacing: 4),
           itemCount: 30,
           itemBuilder: (context, index) {
             final isSelected = _selectedIndices.contains(index);
@@ -1738,22 +1688,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               return InkWell(
                 onTap: () {
                   setState(() {
-                    if (isSelected) {
-                      _selectedIndices.remove(index);
-                    } else {
-                      _selectedIndices.add(index);
-                    }
+                    if (isSelected) _selectedIndices.remove(index); else _selectedIndices.add(index);
                   });
                 },
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.green.shade100 : Colors.white,
-                    border: Border.all(
-                      color: isSelected ? Colors.green : Colors.grey,
-                      width: isSelected ? 2 : 1,
-                    ),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  decoration: BoxDecoration(color: isSelected ? Colors.green.shade100 : Colors.white, border: Border.all(color: isSelected ? Colors.green : Colors.grey, width: isSelected ? 2 : 1), borderRadius: BorderRadius.circular(4)),
                   alignment: Alignment.center,
                   padding: const EdgeInsets.all(4),
                   child: Column(
@@ -1761,17 +1700,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     children: [
                       Text('${index + 1}', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
                       if (controller!.text.isNotEmpty)
-                        Expanded(
-                          child: Center(
-                            child: Text(
-                              controller.text, 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                              textAlign: TextAlign.center,
-                              maxLines: 3, 
-                              overflow: TextOverflow.ellipsis, 
-                            ),
-                          ),
-                        ),
+                        Expanded(child: Center(child: Text(controller.text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis))),
                     ],
                   ),
                 ),
@@ -1791,29 +1720,17 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                   TextInputFormatter.withFunction((oldValue, newValue) {
                     int newLines = newValue.text.split('\n').length;
                     if (newLines > 3) return oldValue; 
-                    
-                    return TextEditingValue(
-                      text: newValue.text.toUpperCase(),
-                      selection: newValue.selection,
-                    );
+                    return TextEditingValue(text: newValue.text.toUpperCase(), selection: newValue.selection);
                   }),
                 ],
-                decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    labelText: '${index + 1}',
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4) 
-                ),
+                decoration: InputDecoration(border: const OutlineInputBorder(), labelText: '${index + 1}', contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4)),
                 style: const TextStyle(fontSize: 13),
                 textAlign: TextAlign.center);
           },
         ),
-
         const Padding(
           padding: EdgeInsets.only(top: 16.0, bottom: 8.0),
-          child: Text(
-            'PUERTAS', 
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 2.0)
-          ),
+          child: Text('PUERTAS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 2.0)),
         ),
       ],
     );
@@ -1823,9 +1740,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    return TextEditingValue(
-      text: newValue.text.toUpperCase(),
-      selection: newValue.selection,
-    );
+    return TextEditingValue(text: newValue.text.toUpperCase(), selection: newValue.selection);
   }
 }

@@ -507,4 +507,20 @@ class SupabaseService {
   Future<void> deleteOperator(String id) async { 
     await _supabase.from('operators').delete().eq('id', id);
   }
+
+  Future<List<Map<String, dynamic>>> searchProducts(String query) async {
+    try {
+      final response = await _supabase
+          .from('t_producto')
+          .select('c_codigo_pro, v_nombre_pro, c_codigo_tam, t_tamano(v_nombre_tam)')
+          .ilike('v_nombre_pro', '%$query%')
+          .order('v_nombre_pro', ascending: true)
+          .limit(10);
+          
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error buscando productos: $e');
+      return [];
+    }
+  }
 }

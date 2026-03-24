@@ -81,8 +81,8 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
           .where((manifest) =>
               manifest.trailerNo.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
               manifest.productor.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
-              manifest.consignadoA.toLowerCase().contains(enteredKeyword.toLowerCase()))
-          .toList();
+              manifest.destinos.any((d) => d.consignadoA.toLowerCase().contains(enteredKeyword.toLowerCase()))
+          ).toList(); // <--- ¡AQUÍ ESTÁ EL PARÉNTESIS CORREGIDO!
     }
 
     setState(() {
@@ -199,7 +199,7 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                                 '$titulo $prefijo-${manifest.trailerNo}', 
                                 style: const TextStyle(fontWeight: FontWeight.bold)
                               ),
-                              subtitle: Text('${manifest.fecha}\n${manifest.consignadoA}'),
+                              subtitle: Text('${manifest.fecha}\n${manifest.destinos.map((d) => d.consignadoA).join(' / ')}'),
                               isThreeLine: true,
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
