@@ -308,7 +308,7 @@ class PdfGenerator {
               children: [
                 _cellHeader('PRODUCTO'),
                 _cellHeader('ETIQUETAS'),
-                _cellHeader('TAMAÑO'),
+                _cellHeader('TAMAÑO/PESO'),
                 _cellHeader('No. PALLETS'),
                 _cellHeader('CAJAS'),
               ],

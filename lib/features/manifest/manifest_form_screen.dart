@@ -14,7 +14,6 @@ import 'package:manifiestos_app/models/operator.dart';
 import 'package:manifiestos_app/models/employee.dart';
 import 'package:manifiestos_app/models/producer.dart';
 import 'package:manifiestos_app/models/company_trailer.dart';
-import 'package:manifiestos_app/models/product.dart';
 
 class _DestinoControllers {
   Client? selectedClient;
@@ -46,6 +45,8 @@ class _CargaItemControllers {
   final FocusNode palletsNode;
   final FocusNode cajasPorPalletNode;
 
+  bool isPeso;
+
   _CargaItemControllers(CargaItem item)
       : producto = TextEditingController(text: item.producto),
         etiquetas = TextEditingController(text: item.etiquetas),
@@ -53,6 +54,7 @@ class _CargaItemControllers {
         pallets = TextEditingController(text: item.pallets.toString()),
         cajasPorPallet = TextEditingController(text: item.cajasPorPallet.toString()),
         cajas = TextEditingController(text: (item.pallets * item.cajasPorPallet).toString()),
+        isPeso = item.tamano.toUpperCase().contains('KG'), 
         productoNode = FocusNode(),
         etiquetasNode = FocusNode(),
         tamanoNode = FocusNode(),
@@ -117,7 +119,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   
   List<TextEditingController> _producerControllers = []; 
   List<_DestinoControllers> _destinosControllers = []; 
+  
+  List<List<_CargaItemControllers>> _cargaSectionsControllers = [];
   List<int> _sectionDestinosIndices = []; 
+  List<int> _sectionProducersIndices = []; 
   
   final _operadorController = TextEditingController();
   final _trailerController = TextEditingController();
@@ -130,12 +135,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   final _embarcoNombreController = TextEditingController();
   final _recibioNombreController = TextEditingController();
 
-  List<List<_CargaItemControllers>> _cargaSectionsControllers = [];
-  
   late Map<int, TextEditingController> _trailerLayoutControllers;
   final SignatureController _embarcoSignatureController = SignatureController(penStrokeWidth: 2, penColor: Colors.black);
   final SignatureController _recibioSignatureController = SignatureController(penStrokeWidth: 2, penColor: Colors.black);
-
 
   @override
   void initState() {
@@ -149,6 +151,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       _fechaController.text = _formatDate(DateTime.now());
       setState(() {
         _addDestinoSection(); 
+        // Inicializamos con 1 Productor, lo cual automáticamente disparará 1 Carga
         _addProducerSection(); 
       });
     }
@@ -196,14 +199,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     }
   }
 
+  // --- DESTINOS ---
   void _addDestinoSection() {
     setState(() {
       _destinosControllers.add(_DestinoControllers());
-      if (_destinosControllers.length == 1) {
-        for (int i = 0; i < _sectionDestinosIndices.length; i++) {
-          _sectionDestinosIndices[i] = 0;
-        }
-      }
     });
   }
 
@@ -211,23 +210,21 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     setState(() {
       _destinosControllers[index].dispose();
       _destinosControllers.removeAt(index);
-      
       for (int i = 0; i < _sectionDestinosIndices.length; i++) {
-        if (_sectionDestinosIndices[i] == index) {
-          _sectionDestinosIndices[i] = 0; 
-        } else if (_sectionDestinosIndices[i] > index) {
-          _sectionDestinosIndices[i]--; 
-        }
+        if (_sectionDestinosIndices[i] == index) _sectionDestinosIndices[i] = 0; 
+        else if (_sectionDestinosIndices[i] > index) _sectionDestinosIndices[i]--; 
       }
     });
   }
 
+  // --- PRODUCTORES (Info General) ---
   void _addProducerSection() {
     setState(() {
       _producerControllers.add(TextEditingController());
-      _cargaSectionsControllers.add([]); 
-      _sectionDestinosIndices.add(0); 
-      _addItemToSection(_cargaSectionsControllers.length - 1);
+      int newIndex = _producerControllers.length - 1;
+      // Magia: Al agregar productor, agregamos carga automáticamente, 
+      // ligada a este productor y su respectivo destino (si existe)
+      _addCargaSection(pIndex: newIndex, dIndex: newIndex);
     });
   }
 
@@ -235,11 +232,41 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     setState(() {
       _producerControllers[index].dispose();
       _producerControllers.removeAt(index);
+      for (int i = 0; i < _sectionProducersIndices.length; i++) {
+        if (_sectionProducersIndices[i] == index) _sectionProducersIndices[i] = 0; 
+        else if (_sectionProducersIndices[i] > index) _sectionProducersIndices[i]--; 
+      }
+    });
+  }
+
+  // --- SECCIONES DE CARGA (Paso 4) ---
+  void _addCargaSection({int? pIndex, int? dIndex}) {
+    setState(() {
+      _cargaSectionsControllers.add([]);
+      
+      // Asignación inteligente: Si nos pasan un índice (ej. Productor 2), lo usamos. 
+      // Si no existe, usamos el 0 por seguridad.
+      int defaultP = pIndex ?? 0;
+      if (defaultP >= _producerControllers.length) defaultP = 0;
+      
+      int defaultD = dIndex ?? 0;
+      if (defaultD >= _destinosControllers.length) defaultD = 0;
+
+      _sectionProducersIndices.add(defaultP);
+      _sectionDestinosIndices.add(defaultD);
+      
+      _addItemToSection(_cargaSectionsControllers.length - 1);
+    });
+  }
+
+  void _removeCargaSection(int index) {
+    setState(() {
       for (var controller in _cargaSectionsControllers[index]) {
         controller.dispose();
       }
       _cargaSectionsControllers.removeAt(index);
       _sectionDestinosIndices.removeAt(index);
+      _sectionProducersIndices.removeAt(index);
       _calculateTotals();
     });
   }
@@ -249,9 +276,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     newControllers.pallets.addListener(_calculateTotals);
     newControllers.cajasPorPallet.addListener(_calculateTotals);
     setState(() {
-      while (_cargaSectionsControllers.length <= sectionIndex) {
-        _cargaSectionsControllers.add([]);
-      }
       _cargaSectionsControllers[sectionIndex].add(newControllers);
     });
   }
@@ -270,13 +294,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         final pallets = int.tryParse(controllers.pallets.text) ?? 0;
         final cajasPorPallet = int.tryParse(controllers.cajasPorPallet.text) ?? 0;
         final cajas = pallets * cajasPorPallet;
-
         controllers.cajas.text = cajas.toString();
       }
     }
-    if (mounted) {
-      setState(() {}); // Solo para refrescar la interfaz
-    }
+    if (mounted) setState(() {}); 
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -294,9 +315,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
   }
 
   void _removePhoto(int index) {
-    setState(() {
-      _evidencePhotos.removeAt(index);
-    });
+    setState(() => _evidencePhotos.removeAt(index));
   }
 
   void _loadManifestData(ManifestData manifest) async { 
@@ -325,7 +344,6 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     _observacionesController.text = manifest.observaciones;
     _embarcoNombreController.text = manifest.embarcoNombre;
     _recibioNombreController.text = manifest.recibioNombre;
-
     _embarcoFirmaUrl = manifest.embarcoFirmaUrl;
     _recibioFirmaUrl = manifest.recibioFirmaUrl;
 
@@ -342,38 +360,31 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
       setState(() {
         for (var controller in _producerControllers) controller.dispose();
         _producerControllers.clear();
-        _sectionDestinosIndices.clear();
-
         for (var section in _cargaSectionsControllers) {
           for (var controller in section) controller.dispose();
         }
         _cargaSectionsControllers.clear();
+        _sectionDestinosIndices.clear();
+        _sectionProducersIndices.clear();
 
-        List<String> producersList = manifest.sectionProducers;
-        if (producersList.isEmpty && manifest.productor.isNotEmpty) {
-           producersList = [manifest.productor];
-        } else if (producersList.isEmpty) {
-           producersList = ['']; 
-        }
+        // Extraer productores únicos para el Paso 1
+        Set<String> uniqueProducers = {};
+        if (manifest.productor.isNotEmpty) uniqueProducers.add(manifest.productor);
+        uniqueProducers.addAll(manifest.sectionProducers);
+        if (uniqueProducers.isEmpty) uniqueProducers.add('');
 
-        for (String pName in producersList) {
+        for (String pName in uniqueProducers) {
           _producerControllers.add(TextEditingController(text: pName));
         }
 
-        while (_cargaSectionsControllers.length < producersList.length) {
-           _cargaSectionsControllers.add([]);
-        }
-        
+        // Reconstruir Secciones de Carga
         _sectionDestinosIndices = List.from(manifest.sectionDestinos);
-        while (_sectionDestinosIndices.length < producersList.length) {
-           _sectionDestinosIndices.add(0);
+        for (String pName in manifest.sectionProducers) {
+           int pIndex = _producerControllers.indexWhere((c) => c.text == pName);
+           _sectionProducersIndices.add(pIndex != -1 ? pIndex : 0);
         }
 
-        int sectionIndex = 0;
         for (var sectionData in manifest.carga) {
-          if (sectionIndex >= _cargaSectionsControllers.length) {
-             _cargaSectionsControllers.add([]);
-          }
           List<_CargaItemControllers> sectionControllers = [];
           for (var item in sectionData) {
             final newControllers = _CargaItemControllers(item);
@@ -381,11 +392,11 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             newControllers.cajasPorPallet.addListener(_calculateTotals);
             sectionControllers.add(newControllers);
           }
-          _cargaSectionsControllers[sectionIndex] = sectionControllers;
-          sectionIndex++;
+          _cargaSectionsControllers.add(sectionControllers);
         }
 
-        if (_producerControllers.isEmpty) _addProducerSection();
+        while (_sectionDestinosIndices.length < _cargaSectionsControllers.length) _sectionDestinosIndices.add(0);
+        while (_sectionProducersIndices.length < _cargaSectionsControllers.length) _sectionProducersIndices.add(0);
 
         for (final entry in manifest.trailerLayout.entries) {
           final index = int.tryParse(entry.key);
@@ -429,9 +440,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     try {
       final data = await _supabaseService.searchClients(query);
       return data.map((json) => Client.fromMap(json));
-    } catch (e) {
-      return const Iterable.empty();
-    }
+    } catch (e) { return const Iterable.empty(); }
   }
 
   Future<Iterable<Operator>> _searchOperators(String query) async {
@@ -439,9 +448,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     try {
       final data = await _supabaseService.searchOperators(query);
       return data.map((json) => Operator.fromMap(json));
-    } catch (e) {
-      return const Iterable.empty();
-    }
+    } catch (e) { return const Iterable.empty(); }
   }
 
   Future<Iterable<Employee>> _searchEmployees(String query) async {
@@ -449,9 +456,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
     try {
       final data = await _supabaseService.searchEmployees(query);
       return data.map((json) => Employee.fromMap(json));
-    } catch (e) {
-      return const Iterable.empty();
-    }
+    } catch (e) { return const Iterable.empty(); }
   }
 
   void _showErrorSnackbar(String message) {
@@ -560,9 +565,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         return await Supabase.instance.client.storage.from('manifests').download(internalPath);
       }
       return null;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
 
   Future<void> _generateAndSavePdf() async {
@@ -597,7 +600,9 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
           return CargaItem(
             producto: controllers.producto.text,
             etiquetas: controllers.etiquetas.text,
-            tamano: controllers.tamano.text,
+            tamano: controllers.isPeso && !controllers.tamano.text.toUpperCase().contains('KG') 
+                    ? '${controllers.tamano.text} KG' 
+                    : controllers.tamano.text,
             pallets: int.tryParse(controllers.pallets.text) ?? 0,
             cajasPorPallet: int.tryParse(controllers.cajasPorPallet.text) ?? 0,
           );
@@ -614,6 +619,16 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         condiciones: d.condiciones.text,
       )).toList();
 
+      // Mapear los nombres de los productores seleccionados por sección
+      List<String> sectionProducersNames = [];
+      for (int pIndex in _sectionProducersIndices) {
+        if (pIndex < _producerControllers.length) {
+          sectionProducersNames.add(_producerControllers[pIndex].text);
+        } else {
+          sectionProducersNames.add('');
+        }
+      }
+
       final dataForBd = ManifestData(
         id: widget.manifest?.id,
         tipo: _selectedTipo, 
@@ -628,10 +643,10 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
         caja: _cajaController.text,
         lineaTransportista: _lineaTransportistaController.text,
         tel: _telController.text,
-        importeFlete: 0, // Mandamos 0 por defecto a la BD
-        anticipoFlete: 0, // Mandamos 0 por defecto a la BD
+        importeFlete: 0, 
+        anticipoFlete: 0, 
         carga: cargaCompleta,
-        sectionProducers: producerNames,
+        sectionProducers: sectionProducersNames, 
         sectionDestinos: _sectionDestinosIndices,
         observaciones: _observacionesController.text,
         embarcoNombre: _embarcoNombreController.text,
@@ -750,6 +765,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             );
           },
           steps: [
+            // ================= INFO GENERAL =================
             Step(
               title: const Text('Info General'),
               content: Form(
@@ -824,7 +840,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                     },
                   ),
                   const SizedBox(height: 20),
-                  const Align(alignment: Alignment.centerLeft, child: Text("Productores", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                  const Align(alignment: Alignment.centerLeft, child: Text("Productores Involucrados", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                  const Text("Lista aquí a todos los productores. Más adelante podrás asignarles su carga respectiva.", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 10),
                   ...List.generate(_producerControllers.length, (index) {
                     return Padding(
@@ -860,12 +877,13 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                       ),
                     );
                   }),
-                  TextButton.icon(icon: const Icon(Icons.add_circle), label: const Text("Agregar otro Productor"), onPressed: _addProducerSection),
+                  TextButton.icon(icon: const Icon(Icons.add_circle), label: const Text("Agregar otro Productor a la lista"), onPressed: _addProducerSection),
                 ]),
               ),
               isActive: _currentStep >= 0,
             ),
             
+            // ================= DESTINOS =================
             Step(
               title: const Text('Destinos'),
               content: Form(
@@ -985,6 +1003,7 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               isActive: _currentStep >= 1,
             ),
             
+            // ================= TRANSPORTISTA =================
             Step(
               title: const Text('Transportista'),
               content: Form(
@@ -1150,6 +1169,8 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               ),
               isActive: _currentStep >= 2,
             ),
+            
+            // ================= CARGA (El nuevo diseño desacoplado) =================
             Step(
               title: const Text('Carga'),
               content: _buildCargaTable(),
@@ -1258,42 +1279,39 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(
-                  child: Text(
-                    'Carga: ${_producerControllers.length > sectionIndex ? _producerControllers[sectionIndex].text : "Productor ${sectionIndex + 1}"}', 
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-                  ),
-                ),
-              ],
+                Text('SECCIÓN DE CARGA ${sectionIndex + 1}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                if (_cargaSectionsControllers.length > 1)
+                   IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _removeCargaSection(sectionIndex))
+              ]
             ),
           ),
 
+          // Selector de Productor (Solo aparece si hay más de 1 productor en Info General)
+          if (_producerControllers.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: DropdownButtonFormField<int>(
+                decoration: const InputDecoration(labelText: '¿De qué Productor es esta carga?', filled: true, fillColor: Colors.white),
+                value: _sectionProducersIndices[sectionIndex] < _producerControllers.length ? _sectionProducersIndices[sectionIndex] : 0,
+                items: List.generate(_producerControllers.length, (i) {
+                   return DropdownMenuItem(value: i, child: Text('Productor ${i+1}: ${_producerControllers[i].text.isEmpty ? "(Sin nombre)" : _producerControllers[i].text}'));
+                }),
+                onChanged: (val) { if (val != null) setState(() => _sectionProducersIndices[sectionIndex] = val); }
+              ),
+            ),
+
+          // Selector de Destino (Solo aparece si hay más de 1 destino agregado)
           if (_destinosControllers.length > 1)
             Padding(
               padding: const EdgeInsets.only(bottom: 12.0),
               child: DropdownButtonFormField<int>(
-                decoration: const InputDecoration(
-                  labelText: '¿A qué destino va esta carga?',
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                value: _sectionDestinosIndices[sectionIndex] < _destinosControllers.length 
-                       ? _sectionDestinosIndices[sectionIndex] 
-                       : 0,
+                decoration: const InputDecoration(labelText: '¿A qué destino va esta carga?', filled: true, fillColor: Colors.white),
+                value: _sectionDestinosIndices[sectionIndex] < _destinosControllers.length ? _sectionDestinosIndices[sectionIndex] : 0,
                 items: List.generate(_destinosControllers.length, (i) {
                   final name = _destinosControllers[i].consignadoA.text;
-                  return DropdownMenuItem(
-                    value: i,
-                    child: Text('Destino ${i + 1}: ${name.isEmpty ? "(Sin asignar)" : name}'),
-                  );
+                  return DropdownMenuItem(value: i, child: Text('Destino ${i + 1}: ${name.isEmpty ? "(Sin asignar)" : name}'));
                 }),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      _sectionDestinosIndices[sectionIndex] = val;
-                    });
-                  }
-                },
+                onChanged: (val) { if (val != null) setState(() => _sectionDestinosIndices[sectionIndex] = val); },
               ),
             ),
 
@@ -1321,46 +1339,21 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                                   onPressed: () => _removeItemFromSection(sectionIndex, itemIndex))
                           ],
                         ),
-                        Autocomplete<Product>(
-                          optionsBuilder: (textEditingValue) async {
-                            if (textEditingValue.text.isEmpty) return const Iterable.empty();
-                            try {
-                              final data = await _supabaseService.searchProducts(textEditingValue.text);
-                              return data.map((e) => Product.fromMap(e));
-                            } catch (e) {
-                              return const Iterable.empty();
-                            }
-                          },
-                          displayStringForOption: (option) => option.nombrePro,
-                          onSelected: (selection) {
-                            setState(() {
-                              controllers.producto.text = selection.nombrePro;
-                              if (selection.nombreTam.isNotEmpty) {
-                                controllers.tamano.text = selection.nombreTam;
-                              }
-                            });
-                            controllers.etiquetasNode.requestFocus(); 
-                          },
-                          fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-                            if (controller.text != controllers.producto.text) {
-                              controller.text = controllers.producto.text;
-                            }
-                            return TextFormField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              textCapitalization: TextCapitalization.characters,
-                              inputFormatters: [UpperCaseTextFormatter()],
-                              decoration: const InputDecoration(
-                                labelText: 'Producto',
-                                suffixIcon: Icon(Icons.search, size: 18)
-                              ),
-                              onChanged: (val) => controllers.producto.text = val,
-                              onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
-                              textInputAction: TextInputAction.next,
-                              validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
-                            );
-                          },
+                        
+                        TextFormField(
+                            controller: controllers.producto,
+                            focusNode: controllers.productoNode,
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [UpperCaseTextFormatter()],
+                            decoration: const InputDecoration(
+                              labelText: 'Producto',
+                              hintText: 'Ej. TOMATE, PEPINO...',
+                            ),
+                            onEditingComplete: () => controllers.etiquetasNode.requestFocus(),
+                            textInputAction: TextInputAction.next,
+                            validator: (v) => (v == null || v.isEmpty) ? 'Obligatorio' : null,
                         ),
+                        
                         TextFormField(
                             controller: controllers.etiquetas,
                             focusNode: controllers.etiquetasNode,
@@ -1369,14 +1362,47 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
                             decoration: const InputDecoration(labelText: 'Etiquetas'),
                             onEditingComplete: () => controllers.tamanoNode.requestFocus(),
                             textInputAction: TextInputAction.next),
-                        TextFormField(
-                            controller: controllers.tamano,
-                            focusNode: controllers.tamanoNode,
-                            textCapitalization: TextCapitalization.characters,
-                            inputFormatters: [UpperCaseTextFormatter()],
-                            decoration: const InputDecoration(labelText: 'Tamaño'),
-                            onEditingComplete: () => controllers.palletsNode.requestFocus(),
-                            textInputAction: TextInputAction.next),
+                            
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            ToggleButtons(
+                              isSelected: [!controllers.isPeso, controllers.isPeso],
+                              onPressed: (int index) {
+                                setState(() {
+                                  controllers.isPeso = index == 1;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              selectedColor: Colors.white,
+                              fillColor: Colors.blueGrey,
+                              constraints: const BoxConstraints(minHeight: 45, minWidth: 65),
+                              children: const [
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Tamaño')),
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Peso')),
+                              ],
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                  controller: controllers.tamano,
+                                  focusNode: controllers.tamanoNode,
+                                  keyboardType: controllers.isPeso ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+                                  textCapitalization: controllers.isPeso ? TextCapitalization.none : TextCapitalization.characters,
+                                  inputFormatters: controllers.isPeso ? [] : [UpperCaseTextFormatter()],
+                                  decoration: InputDecoration(
+                                    labelText: controllers.isPeso ? 'Peso' : 'Tamaño',
+                                    hintText: controllers.isPeso ? 'Ej. 1500' : '',
+                                    suffixText: controllers.isPeso ? 'Kg' : null,
+                                  ),
+                                  onEditingComplete: () => controllers.palletsNode.requestFocus(),
+                                  textInputAction: TextInputAction.next),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
                         Row(
                           children: [
                             Expanded(
@@ -1449,6 +1475,17 @@ class _ManifestFormScreenState extends State<ManifestFormScreen> {
               onPressed: () => _addItemToSection(sectionIndex)),
         ],
 
+        const SizedBox(height: 20),
+        
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+            icon: const Icon(Icons.add_to_photos),
+            label: const Text('AGREGAR OTRA SECCIÓN DE CARGA'),
+            onPressed: () => _addCargaSection(), 
+          ),
+        ),
         const SizedBox(height: 20),
       ],
     );
