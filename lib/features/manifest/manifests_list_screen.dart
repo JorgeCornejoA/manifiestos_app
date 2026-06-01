@@ -18,14 +18,28 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
   List<ManifestData> _allManifests = [];
   List<ManifestData> _foundManifests = [];
   bool _isLoading = true;
+  
+  // --- NUEVO: Variable para saber si el usuario es de solo lectura ---
+  bool _isReadOnlyUser = false;
 
   @override
   void initState() {
     super.initState();
+    _checkPermissions(); // Verificamos permisos antes de cargar
     _fetchManifests();
   }
 
-  // --- NUEVO: Función auxiliar para convertir tu fecha (DD-MMM-YYYY) a DateTime real ---
+  // --- NUEVO: Función para consultar los permisos del empleado logueado ---
+  Future<void> _checkPermissions() async {
+    final usuarioActual = await _supabaseService.getCurrentEmployee();
+    if (mounted) {
+      setState(() {
+        _isReadOnlyUser = usuarioActual?.soloLectura ?? false;
+      });
+    }
+  }
+
+  // Función auxiliar para convertir tu fecha (DD-MMM-YYYY) a DateTime real
   DateTime _parseDate(String dateStr) {
     try {
       // Formato esperado: "12-DIC-2024"
@@ -54,7 +68,7 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
     // Obtenemos los datos (no importa el orden en que vengan de la BD)
     List<ManifestData> results = await _supabaseService.getManifests();
     
-    // --- NUEVO: Ordenamiento manual por la fecha escrita ---
+    // Ordenamiento manual por la fecha escrita
     results.sort((a, b) {
       final dateA = _parseDate(a.fecha);
       final dateB = _parseDate(b.fecha);
@@ -82,7 +96,7 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
               manifest.trailerNo.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
               manifest.productor.toLowerCase().contains(enteredKeyword.toLowerCase()) ||
               manifest.destinos.any((d) => d.consignadoA.toLowerCase().contains(enteredKeyword.toLowerCase()))
-          ).toList(); // <--- ¡AQUÍ ESTÁ EL PARÉNTESIS CORREGIDO!
+          ).toList(); 
     }
 
     setState(() {
@@ -177,11 +191,10 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                           final manifest = _foundManifests[index];
                           final hasPdf = manifest.pdfUrl != null && manifest.pdfUrl!.isNotEmpty;
                           
-                          // --- NUEVA LÓGICA: Determinar Tipo ---
+                          // Lógica: Determinar Tipo
                           final bool isEntrada = manifest.tipo == 'EA';
                           final String prefijo = isEntrada ? 'EA' : 'T';
                           final String titulo = isEntrada ? 'Entrada Alm.:' : 'Trailer:';
-                          // Color diferente en el ícono para distinguirlos más rápido visualmente
                           final Color avatarColor = isEntrada ? Colors.orange.shade100 : Colors.blue.shade100;
 
                           return Card(
@@ -190,11 +203,10 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                               leading: CircleAvatar(
                                 backgroundColor: avatarColor,
                                 child: Text(
-                                  prefijo, // Mostrará 'T' o 'EA'
+                                  prefijo, 
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                 ),
                               ),
-                              // Mostrará 'Trailer: T-123' o 'Entrada Alm.: EA-123'
                               title: Text(
                                 '$titulo $prefijo-${manifest.trailerNo}', 
                                 style: const TextStyle(fontWeight: FontWeight.bold)
@@ -204,24 +216,29 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // El PDF lo pueden ver TODOS (lectura y admins)
                                   IconButton(
                                     icon: Icon(Icons.picture_as_pdf, color: hasPdf ? Colors.blue : Colors.grey),
                                     onPressed: hasPdf ? () => _launchPDF(manifest.pdfUrl) : null,
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.orange),
-                                    onPressed: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (context) => ManifestFormScreen(manifest: manifest),
-                                        ),
-                                      ).then((_) => _fetchManifests());
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                    onPressed: () => _confirmDelete(manifest),
-                                  ),
+                                  
+                                  // --- NUEVO: Ocultamos Editar y Eliminar si es Solo Lectura ---
+                                  if (!_isReadOnlyUser) ...[
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.orange),
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (context) => ManifestFormScreen(manifest: manifest),
+                                          ),
+                                        ).then((_) => _fetchManifests());
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                      onPressed: () => _confirmDelete(manifest),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

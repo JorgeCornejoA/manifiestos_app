@@ -16,12 +16,14 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool isAdmin = false;
+  bool isReadOnly = false; // <--- NUEVA VARIABLE: Rastrea si es de solo lectura
+  bool isLoadingPermissions = true; // <--- NUEVA VARIABLE: Para evitar que la pantalla parpadee mientras consulta
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _checkAdminRole(); // <--- Llamamos a la nueva función que verifica la BD
+    _checkRoles(); // <--- Ahora verifica ambos roles
     
     SupabaseService().syncPendingManifests();
 
@@ -38,21 +40,33 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // --- NUEVA FUNCIÓN: Verifica el rol en la Base de Datos ---
-  Future<void> _checkAdminRole() async {
+  // --- FUNCIÓN MODIFICADA: Verifica tanto Admin como Solo Lectura ---
+  Future<void> _checkRoles() async {
     final currentUserEmail = Supabase.instance.client.auth.currentUser?.email;
     
-    // Si por alguna razón es el de soporte, lo dejamos pasar siempre como respaldo
+    // Si es soporte, es admin por defecto
     if (currentUserEmail == 'soporte@fruver.com.mx') {
-      if (mounted) setState(() => isAdmin = true);
+      if (mounted) {
+        setState(() {
+          isAdmin = true;
+          isReadOnly = false;
+          isLoadingPermissions = false;
+        });
+      }
       return;
     }
 
-    // Buscamos al empleado actual en la base de datos
+    // Buscamos al empleado actual
     final currentEmployee = await SupabaseService().getCurrentEmployee();
     
-    if (mounted && currentEmployee != null && currentEmployee.isAdmin) {
-      setState(() => isAdmin = true);
+    if (mounted) {
+      setState(() {
+        if (currentEmployee != null) {
+          isAdmin = currentEmployee.isAdmin;
+          isReadOnly = currentEmployee.soloLectura; // Obtenemos el permiso
+        }
+        isLoadingPermissions = false; // Ya terminó de consultar
+      });
     }
   }
 
@@ -92,47 +106,65 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final menuItems = [
-      _MenuItem(
-        title: 'Nuevo Manifiesto',
-        icon: Icons.add_circle_outline,
-        color: const Color(0xFF2E7D32),
-        route: '/manifest-form',
-      ),
+    // Si todavía está leyendo los permisos, mostramos un círculo de carga
+    if (isLoadingPermissions) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8F9FD),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32))),
+      );
+    }
+
+    // 1. Armamos la lista base. El botón de Consultar lo ven TODOS.
+    final List<_MenuItem> menuItems = [
       _MenuItem(
         title: 'Consultar',
         icon: Icons.search,
         color: const Color(0xFF00897B),
         route: '/manifests-list',
       ),
-      _MenuItem(
-        title: 'Productores',
-        icon: Icons.agriculture,
-        color: const Color(0xFF558B2F),
-        route: '/producers',
-      ),
-      _MenuItem(
-        title: 'Clientes',
-        icon: Icons.business,
-        color: const Color(0xFF558B2F),
-        route: '/clients',
-      ),
-      _MenuItem(
-        title: 'Operadores',
-        icon: Icons.person_pin_circle, 
-        color: const Color(0xFF388E3C),
-        route: '/operators',
-      ),
-      _MenuItem(
-        title: 'Flotilla / Trailers',
-        icon: Icons.local_shipping,
-        color: const Color(0xFF388E3C),
-        isDirectNav: true,
-        destination: const CompanyTrailersScreen(),
-      ),
     ];
 
-    // Se agrega el botón si la base de datos confirmó que es Admin
+    // 2. Si NO es de solo lectura, agregamos todo el resto del menú
+    if (!isReadOnly) {
+      // Insertamos el botón de Nuevo Manifiesto al principio (índice 0)
+      menuItems.insert(0, _MenuItem(
+        title: 'Nuevo Manifiesto',
+        icon: Icons.add_circle_outline,
+        color: const Color(0xFF2E7D32),
+        route: '/manifest-form',
+      ));
+      
+      // Agregamos los catálogos
+      menuItems.addAll([
+        _MenuItem(
+          title: 'Productores',
+          icon: Icons.agriculture,
+          color: const Color(0xFF558B2F),
+          route: '/producers',
+        ),
+        _MenuItem(
+          title: 'Clientes',
+          icon: Icons.business,
+          color: const Color(0xFF558B2F),
+          route: '/clients',
+        ),
+        _MenuItem(
+          title: 'Operadores',
+          icon: Icons.person_pin_circle, 
+          color: const Color(0xFF388E3C),
+          route: '/operators',
+        ),
+        _MenuItem(
+          title: 'Flotilla / Trailers',
+          icon: Icons.local_shipping,
+          color: const Color(0xFF388E3C),
+          isDirectNav: true,
+          destination: const CompanyTrailersScreen(),
+        ),
+      ]);
+    }
+
+    // 3. Finalmente, si es Admin, agregamos el de Empleados
     if (isAdmin) {
       menuItems.add(
         _MenuItem(
@@ -213,7 +245,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context, constraints) {
                     final availableHeight = constraints.maxHeight;
                     final availableWidth = constraints.maxWidth;
-                    final itemHeight = (availableHeight - 20) / 4; 
+                    
+                    // Ajuste de altura dinámica: si es solo lectura (1 botón), lo hacemos más cuadrado
+                    final rowCount = (menuItems.length / 2).ceil();
+                    final itemHeight = rowCount > 1 ? (availableHeight - 20) / 4 : availableHeight / 3; 
                     final itemWidth = availableWidth / 2; 
                     final aspectRatio = itemWidth / itemHeight;
 

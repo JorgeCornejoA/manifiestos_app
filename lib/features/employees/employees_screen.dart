@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // <--- IMPORTANTE PARA EL FORMATO
+import 'package:flutter/services.dart'; 
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
@@ -85,7 +85,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     String? currentSignatureUrl = employee?.signatureUrl;
     Uint8List? pickedSignatureBytes;
     bool isSaving = false; 
-    bool isAdmin = employee?.isAdmin ?? false; 
+    bool isAdmin = employee?.isAdmin ?? false;
+    bool isReadOnly = employee?.soloLectura ?? false;
     final ImagePicker picker = ImagePicker();
 
     showDialog(
@@ -134,16 +135,40 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                         onChanged: isSaving ? null : (val) {
                           setStateDialog(() {
                             isAdmin = val;
+                            // Si se vuelve Admin, forzamos que NO sea Solo Lectura
+                            if (isAdmin) {
+                              isReadOnly = false;
+                            }
                           });
                         },
                       ),
                     ),
-                    const SizedBox(height: 15),
+                    
+                    // --- SWITCH DE SOLO LECTURA (Desaparece si es Admin) ---
+                    if (!isAdmin) ...[
+                      Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 15),
+                        decoration: BoxDecoration(
+                          color: isReadOnly ? Colors.blue.shade50 : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isReadOnly ? Colors.blue : Colors.grey.shade300)
+                        ),
+                        child: SwitchListTile(
+                          title: const Text("¿Usuario de Solo Lectura?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          subtitle: const Text("Solo podrá consultar datos, sin permisos para crear, editar o eliminar.", style: TextStyle(fontSize: 11)),
+                          value: isReadOnly,
+                          activeColor: Colors.blue,
+                          onChanged: isSaving ? null : (val) => setStateDialog(() => isReadOnly = val),
+                        ),
+                      ),
+                    ],
+                    // Espaciado si el admin está activo para que no quede pegado
+                    if (isAdmin) const SizedBox(height: 15),
 
                     TextFormField(
                       controller: nameCtrl,
-                      textCapitalization: TextCapitalization.characters, // <--- TECLADO EN MAYÚSCULAS
-                      inputFormatters: [UpperCaseTextFormatter()], // <--- FORZA MAYÚSCULAS
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [UpperCaseTextFormatter()],
                       decoration: const InputDecoration(
                         labelText: 'Nombre Completo',
                         icon: Icon(Icons.person),
@@ -163,7 +188,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       enabled: !isSaving,
                     ),
 
-                    // --- CONTRASEÑA SÓLO SI ES NUEVO ---
                     if (employee == null) ...[
                       const SizedBox(height: 15),
                       TextFormField(
@@ -189,7 +213,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     const Text('Firma del Empleado', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
 
-                    // Área de firma
                     Container(
                       height: 150,
                       width: double.infinity,
@@ -276,7 +299,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
                   if (employee == null && emailCtrl.text.isNotEmpty && passwordCtrl.text.length < 6) {
                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('La contraseña debe tener mínimo 6 caracteres'))
+                       const SnackBar(content: Text('La contraseña debe tener mínimo 6 caracteres'))
                      );
                      return;
                   }
@@ -296,6 +319,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     email: emailCtrl.text.isEmpty ? null : emailCtrl.text.trim(),
                     signatureUrl: currentSignatureUrl, 
                     isAdmin: isAdmin, 
+                    soloLectura: isReadOnly, // <--- GUARDAMOS EL ESTATUS
                   );
 
                   try {
@@ -357,15 +381,34 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   itemCount: _employees.length,
                   itemBuilder: (context, index) {
                     final emp = _employees[index];
+                    
+                    // --- LOGICA DE COLORES E ICONOS POR ROL ---
+                    Color avatarColor = Colors.green.shade50;
+                    IconData roleIcon = Icons.badge;
+                    Color iconColor = Colors.green;
+                    String roleText = "Rol: Estándar";
+                    Color roleTextColor = Colors.grey.shade600;
+
+                    if (emp.isAdmin) {
+                      avatarColor = Colors.orange.shade100;
+                      roleIcon = Icons.admin_panel_settings;
+                      iconColor = Colors.orange;
+                      roleText = "Rol: Administrador";
+                      roleTextColor = Colors.orange;
+                    } else if (emp.soloLectura) {
+                      avatarColor = Colors.blue.shade50;
+                      roleIcon = Icons.visibility;
+                      iconColor = Colors.blue;
+                      roleText = "Rol: Solo Lectura";
+                      roleTextColor = Colors.blue;
+                    }
+
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: emp.isAdmin ? Colors.orange.shade100 : Colors.green.shade50,
-                          child: Icon(
-                            emp.isAdmin ? Icons.admin_panel_settings : Icons.badge, 
-                            color: emp.isAdmin ? Colors.orange : Colors.green
-                          ),
+                          backgroundColor: avatarColor,
+                          child: Icon(roleIcon, color: iconColor),
                         ),
                         title: Text(emp.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Column(
@@ -379,8 +422,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                 color: emp.email != null && emp.email!.isNotEmpty ? Colors.grey[700] : Colors.redAccent,
                               ),
                             ),
-                            if (emp.isAdmin)
-                               const Text("Rol: Administrador", style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600)),
+                            Text(roleText, style: TextStyle(color: roleTextColor, fontSize: 11, fontWeight: FontWeight.w600)),
                           ],
                         ),
                         trailing: Row(
@@ -408,7 +450,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 }
 
-// --- CLASE MÁGICA PARA FORZAR MAYÚSCULAS ---
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
