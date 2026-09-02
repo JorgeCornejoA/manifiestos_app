@@ -3,6 +3,8 @@ import 'package:manifiestos_app/features/manifest/manifest_form_screen.dart';
 import 'package:manifiestos_app/models/manifest_data.dart';
 import 'package:manifiestos_app/services/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http; // <--- NUEVO IMPORT PARA DESCARGAR
+import 'package:share_plus/share_plus.dart'; // <--- NUEVO IMPORT PARA COMPARTIR
 
 class ManifestsListScreen extends StatefulWidget {
   const ManifestsListScreen({super.key});
@@ -19,7 +21,7 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
   List<ManifestData> _foundManifests = [];
   bool _isLoading = true;
   
-  // --- NUEVO: Variable para saber si el usuario es de solo lectura ---
+  // Variable para saber si el usuario es de solo lectura
   bool _isReadOnlyUser = false;
 
   @override
@@ -29,7 +31,7 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
     _fetchManifests();
   }
 
-  // --- NUEVO: Función para consultar los permisos del empleado logueado ---
+  // Función para consultar los permisos del empleado logueado
   Future<void> _checkPermissions() async {
     final usuarioActual = await _supabaseService.getCurrentEmployee();
     if (mounted) {
@@ -42,9 +44,8 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
   // Función auxiliar para convertir tu fecha (DD-MMM-YYYY) a DateTime real
   DateTime _parseDate(String dateStr) {
     try {
-      // Formato esperado: "12-DIC-2024"
       final parts = dateStr.split('-');
-      if (parts.length != 3) return DateTime(1900); // Si está mal formada, la manda al final
+      if (parts.length != 3) return DateTime(1900); 
 
       final day = int.parse(parts[0]);
       final monthStr = parts[1].toUpperCase();
@@ -65,14 +66,12 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
   // Función para obtener datos y ordenarlos
   Future<void> _fetchManifests() async {
     setState(() => _isLoading = true);
-    // Obtenemos los datos (no importa el orden en que vengan de la BD)
     List<ManifestData> results = await _supabaseService.getManifests();
     
     // Ordenamiento manual por la fecha escrita
     results.sort((a, b) {
       final dateA = _parseDate(a.fecha);
       final dateB = _parseDate(b.fecha);
-      // b.compareTo(a) ordena de MAYOR a MENOR (Más reciente primero)
       return dateB.compareTo(dateA); 
     });
 
@@ -104,6 +103,7 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
     });
   }
 
+  // --- FUNCIÓN PARA VER EL PDF ---
   Future<void> _launchPDF(String? pdfUrl) async {
     if (pdfUrl == null || pdfUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -121,6 +121,47 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No se pudo abrir el PDF. Verifica tu conexión.')),
+        );
+      }
+    }
+  }
+
+  // --- NUEVA FUNCIÓN PARA COMPARTIR EL ARCHIVO FÍSICO ---
+  Future<void> _sharePDF(String? pdfUrl, String trailerNo) async {
+    if (pdfUrl == null || pdfUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este manifiesto no tiene un PDF guardado.')),
+      );
+      return;
+    }
+
+    try {
+      // 1. Avisamos que se está descargando
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Preparando archivo para compartir...')),
+      );
+
+      // 2. Descargamos los datos del PDF en memoria
+      final response = await http.get(Uri.parse(pdfUrl));
+      final bytes = response.bodyBytes;
+
+      // 3. Empaquetamos el archivo
+      final xfile = XFile.fromData(
+        bytes,
+        mimeType: 'application/pdf',
+        name: 'Manifiesto_$trailerNo.pdf', // Nombre del adjunto
+      );
+
+      // 4. Compartimos usando el método actualizado
+      await Share.shareXFiles(
+        [xfile],
+        text: 'Adjunto manifiesto del trailer $trailerNo',
+      );
+      
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al preparar el archivo para compartir.')),
         );
       }
     }
@@ -198,49 +239,77 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
                           final Color avatarColor = isEntrada ? Colors.orange.shade100 : Colors.blue.shade100;
 
                           return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: avatarColor,
-                                child: Text(
-                                  prefijo, 
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                              ),
-                              title: Text(
-                                '$titulo $prefijo-${manifest.trailerNo}', 
-                                style: const TextStyle(fontWeight: FontWeight.bold)
-                              ),
-                              subtitle: Text('${manifest.fecha}\n${manifest.destinos.map((d) => d.consignadoA).join(' / ')}'),
-                              isThreeLine: true,
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // El PDF lo pueden ver TODOS (lectura y admins)
-                                  IconButton(
-                                    icon: Icon(Icons.picture_as_pdf, color: hasPdf ? Colors.blue : Colors.grey),
-                                    onPressed: hasPdf ? () => _launchPDF(manifest.pdfUrl) : null,
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            elevation: 2,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // --- PARTE SUPERIOR: INFORMACIÓN ---
+                                ListTile(
+                                  contentPadding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                                  leading: CircleAvatar(
+                                    backgroundColor: avatarColor,
+                                    child: Text(
+                                      prefijo, 
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
                                   ),
-                                  
-                                  // --- NUEVO: Ocultamos Editar y Eliminar si es Solo Lectura ---
-                                  if (!_isReadOnlyUser) ...[
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.orange),
-                                      onPressed: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (context) => ManifestFormScreen(manifest: manifest),
-                                          ),
-                                        ).then((_) => _fetchManifests());
-                                      },
+                                  title: Text(
+                                    '$titulo $prefijo-${manifest.trailerNo}', 
+                                    style: const TextStyle(fontWeight: FontWeight.bold)
+                                  ),
+                                  subtitle: Padding(
+                                    padding: const EdgeInsets.only(top: 4.0),
+                                    child: Text(
+                                      '${manifest.fecha}\n${manifest.destinos.map((d) => d.consignadoA).join(' / ')}',
+                                      style: const TextStyle(height: 1.3),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                      onPressed: () => _confirmDelete(manifest),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                                  ),
+                                ),
+                                
+                                // --- PARTE INFERIOR: BARRA DE BOTONES ---
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8, bottom: 4),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      // Botón 1: VER (Ojo)
+                                      IconButton(
+                                        icon: Icon(Icons.remove_red_eye, color: hasPdf ? Colors.blue : Colors.grey),
+                                        onPressed: hasPdf ? () => _launchPDF(manifest.pdfUrl) : null,
+                                        tooltip: 'Ver PDF',
+                                      ),
+                                      
+                                      // Botón 2: COMPARTIR FÍSICO (Share verde)
+                                      IconButton(
+                                        icon: Icon(Icons.share, color: hasPdf ? Colors.green : Colors.grey),
+                                        onPressed: hasPdf ? () => _sharePDF(manifest.pdfUrl, manifest.trailerNo) : null,
+                                        tooltip: 'Compartir',
+                                      ),
+                                      
+                                      // Botones 3 y 4: Ocultos si es Solo Lectura
+                                      if (!_isReadOnlyUser) ...[
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, color: Colors.orange),
+                                          onPressed: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) => ManifestFormScreen(manifest: manifest),
+                                              ),
+                                            ).then((_) => _fetchManifests());
+                                          },
+                                          tooltip: 'Editar',
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                          onPressed: () => _confirmDelete(manifest),
+                                          tooltip: 'Eliminar',
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         },
