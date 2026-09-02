@@ -42,21 +42,35 @@ class _ManifestsListScreenState extends State<ManifestsListScreen> {
   }
 
   // Función auxiliar para convertir tu fecha (DD-MMM-YYYY) a DateTime real
+  // --- FUNCIÓN MEJORADA PARA LEER FECHAS (A prueba de errores) ---
   DateTime _parseDate(String dateStr) {
     try {
+      // Cambiamos diagonales por guiones por si acaso y quitamos espacios
+      dateStr = dateStr.replaceAll('/', '-').trim();
       final parts = dateStr.split('-');
       if (parts.length != 3) return DateTime(1900); 
 
-      final day = int.parse(parts[0]);
-      final monthStr = parts[1].toUpperCase();
-      final year = int.parse(parts[2]);
+      final day = int.parse(parts[0].trim());
+      
+      // Limpiamos el mes: mayúsculas, sin puntos y sin espacios
+      final monthStr = parts[1].toUpperCase().replaceAll('.', '').trim();
+      final year = int.parse(parts[2].trim());
 
-      const months = {
-        'ENE': 1, 'FEB': 2, 'MAR': 3, 'ABR': 4, 'MAY': 5, 'JUN': 6,
-        'JUL': 7, 'AGO': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DIC': 12
-      };
+      int month = 1;
+      // Usamos "startsWith" para atrapar cualquier variación de escritura
+      if (monthStr.startsWith('EN')) month = 1;
+      else if (monthStr.startsWith('FEB')) month = 2;
+      else if (monthStr.startsWith('MAR')) month = 3;
+      else if (monthStr.startsWith('ABR')) month = 4;
+      else if (monthStr.startsWith('MAY')) month = 5;
+      else if (monthStr.startsWith('JUN')) month = 6;
+      else if (monthStr.startsWith('JUL')) month = 7;
+      else if (monthStr.startsWith('AGO')) month = 8;
+      else if (monthStr.startsWith('SEP') || monthStr.startsWith('SET')) month = 9; // Cubre SEP, SEPT, SET, etc.
+      else if (monthStr.startsWith('OCT')) month = 10;
+      else if (monthStr.startsWith('NOV')) month = 11;
+      else if (monthStr.startsWith('DIC')) month = 12;
 
-      final month = months[monthStr] ?? 1;
       return DateTime(year, month, day);
     } catch (e) {
       return DateTime(1900);
